@@ -70,7 +70,7 @@ public static class FeedbackPromptFormatter
         text.AppendLine();
         text.AppendLine("## Where the code lives");
         text.AppendLine();
-        text.AppendLine("Repository `lolawhitianga-code/SamedayAdvance`, folder `DiagFileMonitor/`.");
+        text.AppendLine("Repository `lolawhitianga-code/DiagnosticAnalyser`.");
         text.AppendLine();
         text.AppendLine("| Folder | What is in it |");
         text.AppendLine("|---|---|");

@@ -23,7 +23,27 @@ TARGETS = [
 ]
 
 
+def ensure_dumpprops_built():
+    """
+    dumpprops is run with --no-build for speed, which means a clone that has never built it
+    fails with 'No such file or directory' rather than anything that names the real problem.
+    Build it once if it is not there.
+    """
+    project = TOOLS / "dumpprops/dumpprops.csproj"
+    if (TOOLS / "dumpprops/bin/Debug/net8.0/dumpprops").exists():
+        return
+
+    print("building dumpprops (first run in this clone)...")
+    out = subprocess.run(["dotnet", "build", str(project), "-v", "q", "--nologo"],
+                         capture_output=True, text=True, cwd=TOOLS)
+    if out.returncode != 0:
+        print(f"FAILED to build dumpprops:\n{out.stdout}\n{out.stderr}")
+        sys.exit(2)
+
+
 def dump_properties():
+    ensure_dumpprops_built()
+
     merged = {}
     for target in TARGETS:
         out = subprocess.run(

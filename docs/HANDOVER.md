@@ -26,13 +26,14 @@ elaborate vocabulary in both UI text and report output.
 | | |
 |---|---|
 | State | Working and in use. Not packaged or signed; built locally by the user. |
-| Tests | 278 passing, 0 failing, 0 skipped |
+| Tests | 438 passing, 0 failing, 0 skipped |
 | Source | ~7,700 lines C# across 2 projects |
 | Branch | `claude/windows-diag-file-monitor-szw857`, merged to `main` |
-| Repo | `lolawhitianga-code/SamedayAdvance`, subfolder `DiagFileMonitor/` |
+| Repo | `lolawhitianga-code/DiagnosticAnalyser` |
 
-`PRODUCT.md` and `console/` at the repo root belong to an **unrelated** earlier project
-(Sameday Advance). Ignore them.
+The app used to live in a `DiagFileMonitor/` subfolder of `lolawhitianga-code/SamedayAdvance`,
+alongside an unrelated payday-advance project. It was split out into its own repository with its
+history intact, so the paths in this document are now the repository root.
 
 Validated against two real support bundles from machine **M20716** (RakingWallExtruderV3DG at
 Carters, Cambridge). Every parser in `SpidaLogs/` was rewritten at least once after meeting
@@ -89,7 +90,7 @@ prints what is known to be *unknown* for the same reason. Preserve this behaviou
 ## 4. Folder structure
 
 ```
-DiagFileMonitor/
+<repo root>
 ├── DiagFileMonitor.sln
 ├── build.bat                      One-click build for the user (see §9)
 ├── README.md                      End-user instructions, deliberately non-technical
@@ -288,7 +289,7 @@ There is no CI, no installer, no code signing. The user builds it themselves:
 
 1. Install the .NET 8 **SDK** (x64) from Microsoft.
 2. Download the repo as a ZIP from GitHub and extract it.
-3. Double-click **`build.bat`** in `DiagFileMonitor/`.
+3. Double-click **`build.bat`** in the extracted folder.
 4. Run `publish\DiagFileMonitor.exe`.
 
 `build.bat` runs `dotnet publish -c Release -r win-x64 --self-contained true -o publish`, and
