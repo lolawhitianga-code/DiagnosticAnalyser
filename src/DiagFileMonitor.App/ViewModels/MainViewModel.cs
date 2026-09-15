@@ -108,8 +108,24 @@ public partial class MainViewModel : ObservableObject
     {
         SelectedFiles = files.ToList();
         OnPropertyChanged(nameof(SelectionLabel));
+        RefreshCommandStates();
+    }
+
+    /// <summary>
+    /// Re-checks every button whose enabled state depends on the selection, the benchmark, or
+    /// whether an analysis is running.
+    /// <para>
+    /// A RelayCommand caches its CanExecute result until it is told to look again, so a command
+    /// left out of this list is stuck in whatever state it had at startup - which for anything
+    /// needing a selected file means greyed out forever. Keeping the calls in one method rather
+    /// than scattered through each handler is what stops the next command being forgotten.
+    /// </para>
+    /// </summary>
+    private void RefreshCommandStates()
+    {
         AnalyseSelectedCommand.NotifyCanExecuteChanged();
         CompareWithMasterCommand.NotifyCanExecuteChanged();
+        SendFeedbackCommand.NotifyCanExecuteChanged();
     }
 
     public string SelectionLabel => SelectedFiles.Count > 1
@@ -118,6 +134,10 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isAnalysing;
+
+    /// <summary>Every guarded command reads IsAnalysing, so all of them are re-checked here
+    /// rather than by each long-running handler remembering to do it itself.</summary>
+    partial void OnIsAnalysingChanged(bool value) => RefreshCommandStates();
 
     private bool CanAnalyse() => !IsAnalysing && (SelectedFiles.Count > 0 || SelectedFile is not null);
 
@@ -136,7 +156,6 @@ public partial class MainViewModel : ObservableObject
         }
 
         IsAnalysing = true;
-        AnalyseSelectedCommand.NotifyCanExecuteChanged();
         StatusMessage = ids.Count == 1 ? "Analysing..." : $"Analysing {ids.Count} files...";
 
         try
@@ -158,7 +177,6 @@ public partial class MainViewModel : ObservableObject
         finally
         {
             IsAnalysing = false;
-            AnalyseSelectedCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -176,7 +194,7 @@ public partial class MainViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(HasMaster));
         OnPropertyChanged(nameof(MasterLabel));
-        CompareWithMasterCommand.NotifyCanExecuteChanged();
+        RefreshCommandStates();
     }
 
     [RelayCommand]
@@ -210,7 +228,6 @@ public partial class MainViewModel : ObservableObject
         if (MasterFile is null || SelectedFile is null) return;
 
         IsAnalysing = true;
-        CompareWithMasterCommand.NotifyCanExecuteChanged();
         StatusMessage = $"Comparing '{SelectedFile.OriginalFileName}' against the benchmark...";
 
         try
@@ -230,7 +247,6 @@ public partial class MainViewModel : ObservableObject
         finally
         {
             IsAnalysing = false;
-            CompareWithMasterCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -285,7 +301,6 @@ public partial class MainViewModel : ObservableObject
         if (SelectedFile is null) return;
 
         IsAnalysing = true;
-        SendFeedbackCommand.NotifyCanExecuteChanged();
         StatusMessage = "Analysing so the feedback can be written against the report...";
 
         try
@@ -303,7 +318,6 @@ public partial class MainViewModel : ObservableObject
         finally
         {
             IsAnalysing = false;
-            SendFeedbackCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -475,8 +489,7 @@ public partial class MainViewModel : ObservableObject
     partial void OnSelectedFileChanged(DiagnosticFileSummary? value)
     {
         OnPropertyChanged(nameof(SelectionLabel));
-        AnalyseSelectedCommand.NotifyCanExecuteChanged();
-        CompareWithMasterCommand.NotifyCanExecuteChanged();
+        RefreshCommandStates();
         EditTicketNumber = value?.TicketNumber ?? string.Empty;
         EditNotes = value?.Notes ?? string.Empty;
     }

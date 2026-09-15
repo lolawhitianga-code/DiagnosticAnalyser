@@ -41,6 +41,34 @@ def ensure_dumpprops_built():
         sys.exit(2)
 
 
+
+def check_command_guards():
+    """
+    A [RelayCommand(CanExecute = ...)] whose command is never told to re-check is stuck in
+    whatever state it had at startup. For anything guarded on a selected file that means the
+    button is greyed out forever, and the only clue is a dead button - it compiles, it binds,
+    and nothing throws. This caught exactly that on SendFeedbackCommand.
+    """
+    problems = []
+
+    for source in sorted((APP / "ViewModels").rglob("*.cs")):
+        text = source.read_text()
+
+        guarded = re.findall(
+            r"\[RelayCommand\([^\]]*CanExecute\s*=\s*nameof\([^)]+\)[^\]]*\)\]\s*"
+            r"(?:private|public|internal|protected)[^(\n]*?(\w+)\s*\(",
+            text)
+
+        for method in guarded:
+            command = method[:-5] + "Command" if method.endswith("Async") else method + "Command"
+            if f"{command}.NotifyCanExecuteChanged()" not in text:
+                problems.append(
+                    f"{source.name}: {command} has a CanExecute guard but nothing ever calls "
+                    f"{command}.NotifyCanExecuteChanged() - the button will not re-enable")
+
+    return problems
+
+
 def dump_properties():
     ensure_dumpprops_built()
 
@@ -102,6 +130,7 @@ def main():
         all_keys.update(keys_here)
 
     problems.extend(problems_at_start)
+    problems.extend(check_command_guards())
 
     for xaml_file in sorted(APP.rglob("*.xaml")):
         text = xaml_file.read_text()
