@@ -119,13 +119,22 @@ internal static class BarChartSvg
         return top <= 0 ? 1 : NiceCeiling(top);
     }
 
-    /// <summary>Round the axis top up to something a reader can divide in their head.</summary>
+    /// <summary>
+    /// Round the axis top up to something a reader can divide in their head, without leaving half
+    /// the chart empty. Coarser steps look tidy but waste space - a top of 2,351 belongs under a
+    /// 2,500 axis, not a 5,000 one.
+    /// </summary>
     private static double NiceCeiling(double value)
     {
         var magnitude = Math.Pow(10, Math.Floor(Math.Log10(value)));
         var normalised = value / magnitude;
-        var step = normalised <= 1 ? 1 : normalised <= 2 ? 2 : normalised <= 5 ? 5 : 10;
-        return step * magnitude;
+
+        foreach (var step in new[] { 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10 })
+        {
+            if (normalised <= step) return step * magnitude;
+        }
+
+        return 10 * magnitude;
     }
 
     private static List<double> Ticks(double top)

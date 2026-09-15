@@ -26,9 +26,63 @@ public static class DatabaseInitializer
         ("DiagnosticFiles", "SupportIssue", "TEXT NULL")
     };
 
+    /// <summary>
+    /// Tables a newer build expects. EnsureCreated only builds a schema from nothing, so a
+    /// database made by an earlier version never gets a table added later without this.
+    /// </summary>
+    private static readonly (string Table, string Sql)[] ExpectedTables =
+    {
+        ("ProductionLogFiles", """
+            CREATE TABLE IF NOT EXISTS "ProductionLogFiles" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_ProductionLogFiles" PRIMARY KEY AUTOINCREMENT,
+                "SerialNumber" TEXT NOT NULL,
+                "FileName" TEXT NOT NULL,
+                "Year" INTEGER NOT NULL,
+                "Week" INTEGER NOT NULL,
+                "ImportedAtUtc" TEXT NOT NULL,
+                "LinesRead" INTEGER NOT NULL,
+                "ConsecutiveDuplicates" INTEGER NOT NULL,
+                "MalformedLines" INTEGER NOT NULL,
+                "PanelsStored" INTEGER NOT NULL,
+                "Notes" TEXT NULL);
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_ProductionLogFiles_SerialNumber_Year_Week"
+                ON "ProductionLogFiles" ("SerialNumber", "Year", "Week");
+            """),
+        ("ProductionPanels", """
+            CREATE TABLE IF NOT EXISTS "ProductionPanels" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_ProductionPanels" PRIMARY KEY AUTOINCREMENT,
+                "ProductionLogFileId" INTEGER NOT NULL,
+                "SerialNumber" TEXT NOT NULL,
+                "Name" TEXT NOT NULL,
+                "EndedAt" TEXT NOT NULL,
+                "StartedAt" TEXT NULL,
+                "Outcome" TEXT NOT NULL,
+                "FastenerCount" REAL NOT NULL,
+                "MembersAssembled" INTEGER NOT NULL,
+                "Cube" REAL NOT NULL,
+                "Lineal" REAL NOT NULL,
+                "BuildMinutes" REAL NOT NULL,
+                "IdleMinutes" REAL NOT NULL,
+                "Junctions" REAL NOT NULL,
+                "BuildTimeImplausible" INTEGER NOT NULL,
+                CONSTRAINT "FK_ProductionPanels_ProductionLogFiles_ProductionLogFileId"
+                    FOREIGN KEY ("ProductionLogFileId") REFERENCES "ProductionLogFiles" ("Id") ON DELETE CASCADE);
+            CREATE INDEX IF NOT EXISTS "IX_ProductionPanels_SerialNumber" ON "ProductionPanels" ("SerialNumber");
+            CREATE INDEX IF NOT EXISTS "IX_ProductionPanels_EndedAt" ON "ProductionPanels" ("EndedAt");
+            CREATE INDEX IF NOT EXISTS "IX_ProductionPanels_Outcome" ON "ProductionPanels" ("Outcome");
+            """)
+    };
+
     public static void Initialize(DiagDbContext context)
     {
         context.Database.EnsureCreated();
+
+        foreach (var (_, sql) in ExpectedTables)
+        {
+#pragma warning disable EF1002
+            context.Database.ExecuteSqlRaw(sql);
+#pragma warning restore EF1002
+        }
 
         foreach (var (table, column, type) in ExpectedColumns)
         {

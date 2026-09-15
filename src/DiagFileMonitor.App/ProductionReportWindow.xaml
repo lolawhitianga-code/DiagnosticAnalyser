@@ -1,0 +1,82 @@
+<Window x:Class="DiagFileMonitor.App.ProductionReportWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Production reports" Height="700" Width="900"
+        WindowStartupLocation="CenterOwner" Background="{StaticResource AppBackground}">
+    <DockPanel Margin="12">
+        <TextBlock DockPanel.Dock="Top" Text="Production reports" Style="{StaticResource WordmarkPrimary}"
+                   Margin="0,0,0,4" />
+        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{StaticResource BrandGrey}"
+                   Margin="0,0,0,10"
+                   Text="Reads ProdLogV2 weekly logs into this PC's database and builds a production report from what is stored. Logs are read once and kept, so a report covering a year does not re-read a year of files." />
+
+        <Border DockPanel.Dock="Bottom" Style="{StaticResource Panel}" Margin="0,10,0,0">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Close" Width="90" Margin="8,0,0,0"
+                        Click="Close_Click" />
+                <Button DockPanel.Dock="Right" Content="Open it" Width="90"
+                        Command="{Binding OpenReportCommand}" />
+                <Button DockPanel.Dock="Right" Content="Build report" Width="130" Margin="0,0,8,0"
+                        Style="{StaticResource PrimaryButton}"
+                        Command="{Binding BuildCommand}" />
+                <Button DockPanel.Dock="Right" Content="Import logs" Width="110" Margin="0,0,8,0"
+                        Command="{Binding ImportCommand}" />
+                <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" VerticalAlignment="Center" />
+            </DockPanel>
+        </Border>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <Border Style="{StaticResource Panel}">
+                    <StackPanel>
+                        <TextBlock Text="Which machine" Style="{StaticResource SectionHeading}" />
+                        <TextBlock TextWrapping="Wrap" Foreground="{StaticResource BrandGrey}" Margin="0,0,0,8"
+                                   Text="The production log does not carry a serial number, so it has to be typed. It is what the stored weeks are filed under." />
+
+                        <TextBlock Text="Serial number" Margin="0,0,0,4" />
+                        <TextBox Text="{Binding SerialNumber, UpdateSourceTrigger=PropertyChanged}"
+                                 Margin="0,0,0,10" />
+
+                        <TextBlock Text="Machine name for the report title" Margin="0,0,0,4" />
+                        <TextBox Text="{Binding MachineName, UpdateSourceTrigger=PropertyChanged}"
+                                 Margin="0,0,0,10" />
+
+                        <TextBlock Text="Site" Margin="0,0,0,4" />
+                        <TextBox Text="{Binding Site, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Panel}" Margin="0,10,0,0">
+                    <StackPanel>
+                        <TextBlock Text="Import weekly logs" Style="{StaticResource SectionHeading}" />
+                        <TextBlock TextWrapping="Wrap" Foreground="{StaticResource BrandGrey}" Margin="0,0,0,8"
+                                   Text="Point this at a folder of ProdLogV2 files. Sub-folders are read too, and a week already stored is skipped rather than counted twice." />
+
+                        <TextBlock Text="Folder" Margin="0,0,0,4" />
+                        <TextBox Text="{Binding LogFolder, UpdateSourceTrigger=PropertyChanged}"
+                                 Margin="0,0,0,8" />
+
+                        <CheckBox Content="Re-read weeks already stored, replacing them"
+                                  IsChecked="{Binding ReplaceExisting}" Margin="0,0,0,10" />
+
+                        <TextBlock Text="Already stored" FontWeight="SemiBold" Margin="0,0,0,4" />
+                        <TextBox Text="{Binding StoredSummary, Mode=OneWay}" IsReadOnly="True"
+                                 FontFamily="Consolas" FontSize="11" Height="70"
+                                 VerticalScrollBarVisibility="Auto" Margin="0,0,0,8" />
+                        <Button Content="Refresh" Width="90" HorizontalAlignment="Left"
+                                Command="{Binding RefreshStoredCommand}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Panel}" Margin="0,10,0,0">
+                    <StackPanel>
+                        <TextBlock Text="Shift model" Style="{StaticResource SectionHeading}" />
+                        <TextBlock TextWrapping="Wrap" Foreground="{StaticResource BrandGrey}" Margin="0,0,0,8"
+                                   Text="Availability is worked out from this, not measured. Two machines only compare on availability if they are on the same model, and the report prints whichever one was used." />
+                        <ComboBox ItemsSource="{Binding ShiftModelOptions}" SelectedIndex="{Binding ShiftModelIndex}" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

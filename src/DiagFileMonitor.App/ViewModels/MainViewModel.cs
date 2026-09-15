@@ -32,6 +32,9 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>Builds the HTML reports. Held here so the view can hand it to the report window.</summary>
     public ReportService ReportService { get; }
+
+    /// <summary>Reads and stores ProdLogV2 production logs.</summary>
+    public ProductionImportService ProductionImportService { get; }
     private readonly int _repeatWindowDays;
 
     /// <summary>Company logo, if one was dropped next to the exe. Null shows the text wordmark instead.</summary>
@@ -235,6 +238,7 @@ public partial class MainViewModel : ObservableObject
     public event EventHandler<AnalysisResult>? AnalysisReady;
     public event EventHandler<FeedbackRequest>? FeedbackRequested;
     public event EventHandler<ReportRequestArgs>? ReportRequested;
+    public event EventHandler<ReportRequestArgs>? ProductionReportRequested;
 
     public record AnalysisResult(string Heading, string ReportText);
 
@@ -251,6 +255,17 @@ public partial class MainViewModel : ObservableObject
     {
         ReportRequested?.Invoke(this, new ReportRequestArgs(ReportsFolder));
         StatusMessage = "Choose what the report should cover, then build it.";
+    }
+
+    /// <summary>
+    /// Opens the production report builder. Production data comes from ProdLogV2 weekly logs
+    /// rather than from diagnostic bundles, so it does not need a selected file either.
+    /// </summary>
+    [RelayCommand]
+    private void BuildProductionReport()
+    {
+        ProductionReportRequested?.Invoke(this, new ReportRequestArgs(ReportsFolder));
+        StatusMessage = "Import the machine's ProdLogV2 logs, then build the report.";
     }
 
     private string ReportsFolder => System.IO.Path.Combine(
@@ -506,6 +521,7 @@ public partial class MainViewModel : ObservableObject
         _comparisonService = comparisonService;
         FeedbackPackageService = new FeedbackPackageService(repository, analysisService);
         ReportService = new ReportService(repository);
+        ProductionImportService = new ProductionImportService(repository.ContextFactory);
 
         FilesView = CollectionViewSource.GetDefaultView(Files);
         FilesView.Filter = o => o is DiagnosticFileSummary row && DiagnosticFileFilter.Matches(row, CurrentCriteria());

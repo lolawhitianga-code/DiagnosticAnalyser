@@ -9,7 +9,10 @@ public enum ReportKind
     FaultBenchmarking,
 
     /// <summary>Report 6 - the case for a mechanical change, built on report 5's evidence.</summary>
-    MechanicalChangeCase
+    MechanicalChangeCase,
+
+    /// <summary>Report 3 - the historic production rollup, built from ProdLogV2 weekly logs.</summary>
+    ProductionRollup
 }
 
 public class ReportRequest

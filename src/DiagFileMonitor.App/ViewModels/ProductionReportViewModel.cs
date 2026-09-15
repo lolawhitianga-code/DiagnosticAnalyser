@@ -1,0 +1,185 @@
+using System.Diagnostics;
+using System.IO;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using DiagFileMonitor.Core.Production;
+using DiagFileMonitor.Core.Reports;
+using DiagFileMonitor.Core.Services;
+
+namespace DiagFileMonitor.App.ViewModels;
+
+/// <summary>
+/// Reads ProdLogV2 weekly logs into the local database and builds a production report from what
+/// is stored.
+/// <para>
+/// Importing and reporting are separate on purpose: the logs are read once and kept, so a report
+/// covering a year does not mean re-reading a year of files every time.
+/// </para>
+/// </summary>
+public partial class ProductionReportViewModel : ObservableObject
+{
+    private readonly ProductionImportService _import;
+    private readonly string _outputFolder;
+
+    [ObservableProperty] private string _serialNumber = string.Empty;
+    [ObservableProperty] private string _machineName = string.Empty;
+    [ObservableProperty] private string _site = string.Empty;
+    [ObservableProperty] private string _logFolder = string.Empty;
+
+    [ObservableProperty] private int _shiftModelIndex;
+    [ObservableProperty] private bool _replaceExisting;
+
+    [ObservableProperty] private string _storedSummary = string.Empty;
+    [ObservableProperty] private string _statusMessage = string.Empty;
+    [ObservableProperty] private bool _isBusy;
+    [ObservableProperty] private string _createdPath = string.Empty;
+
+    public List<string> ShiftModelOptions { get; } = new()
+    {
+        "Single day shift, 07:00-17:00 with three breaks",
+        "Round the clock, six breaks (Carters Auckland)"
+    };
+
+    public bool HasCreatedReport => CreatedPath.Length > 0;
+
+    public ProductionReportViewModel(ProductionImportService import, string outputFolder)
+    {
+        _import = import;
+        _outputFolder = outputFolder;
+    }
+
+    partial void OnCreatedPathChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasCreatedReport));
+        OpenReportCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnSerialNumberChanged(string value)
+    {
+        ImportCommand.NotifyCanExecuteChanged();
+        BuildCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnLogFolderChanged(string value) => ImportCommand.NotifyCanExecuteChanged();
+
+    private ShiftModel Shift => ShiftModelIndex == 1
+        ? ShiftModel.CartersAucklandRoundTheClock
+        : ShiftModel.SingleDayShift;
+
+    private bool CanImport() =>
+        !IsBusy && SerialNumber.Trim().Length > 0 && LogFolder.Trim().Length > 0;
+
+    private bool CanBuild() => !IsBusy && SerialNumber.Trim().Length > 0;
+
+    [RelayCommand(CanExecute = nameof(CanImport))]
+    private async Task ImportAsync()
+    {
+        IsBusy = true;
+        ImportCommand.NotifyCanExecuteChanged();
+        StatusMessage = "Reading the production logs...";
+
+        try
+        {
+            var result = await _import.ImportFolderAsync(LogFolder.Trim(), SerialNumber.Trim(), ReplaceExisting);
+
+            StatusMessage = result.Summary;
+            foreach (var note in result.Notes) StatusMessage += Environment.NewLine + note;
+
+            await RefreshStoredAsync();
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Could not read the logs: {ex.Message}";
+            SimpleLogger.Error("Could not import production logs", ex);
+        }
+        finally
+        {
+            IsBusy = false;
+            ImportCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    [RelayCommand]
+    private async Task RefreshStoredAsync()
+    {
+        try
+        {
+            var machines = await _import.StoredMachinesAsync();
+
+            StoredSummary = machines.Count == 0
+                ? "No production logs stored yet."
+                : string.Join(Environment.NewLine,
+                    machines.Select(m => $"{m.SerialNumber}: {m.Weeks} week(s), {m.Panels:N0} panel(s)"));
+        }
+        catch (Exception ex)
+        {
+            StoredSummary = $"Could not read what is stored: {ex.Message}";
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanBuild))]
+    private async Task BuildAsync()
+    {
+        IsBusy = true;
+        BuildCommand.NotifyCanExecuteChanged();
+        StatusMessage = "Building the report...";
+        CreatedPath = string.Empty;
+
+        try
+        {
+            var serial = SerialNumber.Trim();
+            var panels = await _import.LoadPanelsAsync(serial);
+
+            if (panels.Count == 0)
+            {
+                StatusMessage = $"Nothing stored for {serial}. Import its production logs first.";
+                return;
+            }
+
+            var summary = ProductionAnalyser.Summarise(panels, Shift, serial, Site.Trim());
+            var model = ProductionReport.Build(summary, MachineName.Trim());
+            var html = new ReportHtmlRenderer().Render(model);
+
+            Directory.CreateDirectory(_outputFolder);
+            var path = Path.Combine(_outputFolder,
+                $"production-{Slug(serial)}-{summary.To:yyyy-MM-dd}.html");
+
+            await File.WriteAllTextAsync(path, html);
+            CreatedPath = path;
+
+            StatusMessage = $"{summary.PanelsCompleted:N0} panel(s) over {summary.DaysWithOutput} "
+                            + $"production day(s). Saved as {Path.GetFileName(path)}.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Could not build the report: {ex.Message}";
+            SimpleLogger.Error("Could not build the production report", ex);
+        }
+        finally
+        {
+            IsBusy = false;
+            BuildCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(HasCreatedReport))]
+    private void OpenReport()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(CreatedPath) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Could not open it: {ex.Message}";
+        }
+    }
+
+    private static string Slug(string value)
+    {
+        var chars = value.Trim().ToLowerInvariant()
+            .Select(c => char.IsLetterOrDigit(c) ? c : '-').ToArray();
+
+        return string.Join('-', new string(chars).Split('-', StringSplitOptions.RemoveEmptyEntries));
+    }
+}

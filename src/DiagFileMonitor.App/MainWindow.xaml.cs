@@ -17,6 +17,7 @@ public partial class MainWindow : Window
             previous.AnalysisReady -= OnAnalysisReady;
             previous.FeedbackRequested -= OnFeedbackRequested;
             previous.ReportRequested -= OnReportRequested;
+            previous.ProductionReportRequested -= OnProductionReportRequested;
         }
 
         if (e.NewValue is ViewModels.MainViewModel current)
@@ -24,6 +25,7 @@ public partial class MainWindow : Window
             current.AnalysisReady += OnAnalysisReady;
             current.FeedbackRequested += OnFeedbackRequested;
             current.ReportRequested += OnReportRequested;
+            current.ProductionReportRequested += OnProductionReportRequested;
         }
     }
 
@@ -45,6 +47,21 @@ public partial class MainWindow : Window
             Owner = this,
             DataContext = new ViewModels.ReportViewModel(viewModel.ReportService, request.OutputFolder)
         }.Show();
+    }
+
+    private void OnProductionReportRequested(object? sender, ViewModels.MainViewModel.ReportRequestArgs request)
+    {
+        if (DataContext is not ViewModels.MainViewModel viewModel) return;
+
+        var window = new ProductionReportWindow
+        {
+            Owner = this,
+            DataContext = new ViewModels.ProductionReportViewModel(
+                viewModel.ProductionImportService, request.OutputFolder)
+        };
+
+        window.Show();
+        ((ViewModels.ProductionReportViewModel)window.DataContext).RefreshStoredCommand.Execute(null);
     }
 
     private void OnFeedbackRequested(object? sender, ViewModels.MainViewModel.FeedbackRequest request)

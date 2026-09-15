@@ -18,6 +18,12 @@ public class DiagFileRepository
         _contextFactory = contextFactory;
     }
 
+    /// <summary>
+    /// The same factory, for a service that needs its own context rather than going through this
+    /// repository - production logs are a different shape of data and get their own reader.
+    /// </summary>
+    public Func<DiagDbContext> ContextFactory => _contextFactory;
+
     public async Task<int> AddAsync(DiagnosticFile file)
     {
         await using var context = _contextFactory();

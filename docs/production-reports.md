@@ -1,0 +1,137 @@
+# Production reports
+
+Reads ProdLogV2 weekly production logs into this PC's database and builds a production report from
+what is stored. **Production** on the main toolbar opens it.
+
+Importing and reporting are separate: logs are read once and kept, so a report covering a year
+does not re-read a year of files.
+
+## What was checked, and against what
+
+Ten real weeks from **M21737** (PlaceMakers Auckland, 4.8M Raked Extruder), weeks 28-37 of 2026 -
+213,665 lines. Every rule below was measured on that data, not taken from the reference guide on
+trust. Where the guide and the data disagree, the data won and the disagreement is recorded.
+
+Result on that sample: 4,665 panels completed, 1,002 stepped past, 72 stopped by the operator,
+3,350 superseded. **Fault rate 1.25%**, which lands inside the 0.5-3% band the delivered reports
+show for other machines.
+
+## Where this differs from the supplied guide
+
+### Panel names are reused labels, not unique identifiers
+
+This is the big one, and the guide does not mention it.
+
+On the M21737 sample there are **426 distinct panel names across 10,364 `PanelStarted` events**.
+`E5` was started 139 times and assembled 53 times. `E1`: 137 and 56.
+
+The guide's rule 3 says a panel that never gets a matching `PanelAssembled` is abandoned, and
+therefore a fault. Applied literally that gives a **37.7% fault rate** - and the guide itself says
+a double-digit rate means the rules are being applied wrong.
+
+So a panel left open when a *different* name starts is classified `Superseded` and is **not** a
+fault. It is the operator moving around the HMI. The only unambiguous abandonment signal is
+`PanelStopped`, which the controller writes on purpose. The report prints the superseded count with
+an explanation, because a large number with no explanation looks alarming.
+
+### "Every event type is written twice" is overstated
+
+Measured across all ten weeks:
+
+| Event | Consecutive duplicates |
+|---|---|
+| `MemberAssembled` | 41,305 of 83,244 - **49.6%** |
+| `MachineStopped` | 4,809 of 16,090 - **29.9%** |
+| `PanelAssembled`, `PanelStarted`, `PanelStopped`, `MachineStarted`, `MachineIdleStart`, `MachineIdleStop`, `MemberCut` | **0** |
+
+De-duplication is still applied and is still right - it only ever suppresses a line byte-identical
+to the one immediately before it - but the panel rows the report is built from were never at risk.
+The doubling matters for member counts, not panel counts.
+
+### The guide contradicts itself on what to keep
+
+Rule 3 needs `PanelStarted` to spot abandoned and stepped-past panels. "What you actually need to
+keep" says filter down to `PanelAssembled` and `PanelStopped` before doing anything else. Both
+cannot be true. This implementation keeps `PanelStarted` and `MemberAssembled` through parsing and
+discards them after classification.
+
+### Rules that held up exactly
+
+- Same-name restarts: **15.3%** measured, against the guide's "roughly 15-20%".
+- Build time must come from the log's own field, never recomputed from elapsed time between events.
+- Implausible spans are real: **77 panels** logged over 20 minutes, the worst at **304 minutes**.
+  Flagged and kept out of time averages rather than counted at face value.
+- Availability from a shift model rather than from `MachineStarted`/`MachineStopped`.
+
+## Unknowns - flagged, to verify later
+
+These are live in the code as comments and in the report as a "Not yet verified" callout.
+
+**1. The fastener count column (field 3 of `PanelAssembled`).** The guide says it runs about 4x the
+member count. On M21737 only **5.7%** of panels matched that and the mean ratio was **2.86**. It is
+non-zero on 2,632 of 5,667 rows and its values are almost all multiples of 4. Curiously, the same
+150 panels where it equals 4x members are exactly the ones where it equals the junction count.
+Stored raw as `FastenerCount`, reported raw, and **nothing is derived from it**.
+*To settle: count the fasteners physically on one panel and compare.*
+
+**2. 26.7% of completed panels log a build time of exactly zero.** 1,245 of 4,665. They are counted
+as panels; what a zero means is not known. *To settle: watch one build and see what gets logged.*
+
+**3. 340 of 412 `PanelStopped` events arrive with no panel open.** Only 72 closed one. Those 340 are
+currently ignored. *To settle: is a `PanelStopped` with nothing open meaningful, or HMI noise?*
+
+**4. The delivered reports' "genuine faults" figure cannot be reproduced.** The Line 3 report shows
+39 faults in 7,291 panels (0.53%); this implementation would call them operator stops. The
+authoritative definition lives in the JavaScript inside
+`Line3-RakedExtruder-CartersAuckland-production.html`, which has not been supplied.
+*To settle: send that file, or a ProdLogV2 set for AOR1694 or M14454 so the numbers can be
+reconciled against totals already signed off.*
+
+**5. The shift model is an assumption, not a measurement.** Availability changes completely with it.
+The round-the-clock Carters model is transcribed from the delivered reports, including the 03:30
+overnight gap those reports flag as not being on any official break sheet. Applying that model to
+M21737 gives 56.7% - but nobody has confirmed PlaceMakers runs round the clock, and if it runs a
+single shift the real figure is different. *To settle: confirm the shift pattern per site.*
+
+**6. Serial numbers are typed in, not read.** ProdLogV2 carries no machine identity - not in the
+file, not in the name. The importer files weeks under whatever serial is entered. *To settle: is
+there a manifest alongside these exports, or does the folder name carry it?*
+
+**7. `MemberCut` is rare and unused.** 13 events in ten weeks. Parsed and kept, never counted.
+
+## How it fits together
+
+```
+ProdLogV2*.log → ProdLogParser → PanelClassifier → ProductionPanels table
+                                                          │
+                                              ProductionAnalyser → ProductionSummary
+                                                          │
+                                              ProductionReport → ReportModel
+                                                          │
+                                              ReportHtmlRenderer → one .html file
+```
+
+Same renderer, blocks and chart code as the diagnostic reports, so a production report is
+self-contained and offline the same way.
+
+| File | Job |
+|---|---|
+| `Production/ProdLogParser.cs` | Reads a weekly log; dedupe, NUL stripping, bad-line survival |
+| `Production/PanelClassifier.cs` | Completed / stepped past / stopped / superseded |
+| `Production/ShiftModel.cs` | Shift and break model, per site |
+| `Production/ProductionAnalyser.cs` | Day, month and window figures; cross-machine downtime |
+| `Services/ProductionImportService.cs` | Import, de-duplicate by week, load back |
+| `Reports/ProductionReport.cs` | Builds the report model |
+
+## A week is imported once
+
+A week is identified by serial plus ISO week from the file name, not by path - exports carry a
+duplicate copy of recent weeks in a second folder, and the guide is right that processing both
+would double the figures. Re-importing a week already held is skipped unless "replace" is ticked.
+
+## Days with no output are kept
+
+Every calendar day between the first and last panel gets a row, including empty ones. A day where a
+machine sat at zero while the rest of the site worked is the most useful thing this data surfaces.
+An empty day contributes **zero planned minutes**, so a shutdown nobody was rostered for does not
+drag availability down as though the machine had been idle on shift.
