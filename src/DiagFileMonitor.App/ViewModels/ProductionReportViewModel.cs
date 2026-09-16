@@ -29,6 +29,12 @@ public partial class ProductionReportViewModel : ObservableObject
     [ObservableProperty] private int _shiftModelIndex;
     [ObservableProperty] private bool _replaceExisting;
 
+    /// <summary>Treat the chosen folder as a parent, with one sub-folder per machine.</summary>
+    [ObservableProperty] private bool _eachSubfolderIsAMachine;
+
+    /// <summary>What the folder name says the machine is, shown so the guess is visible.</summary>
+    [ObservableProperty] private string _folderHint = string.Empty;
+
     [ObservableProperty] private string _storedSummary = string.Empty;
     [ObservableProperty] private string _statusMessage = string.Empty;
     [ObservableProperty] private bool _isBusy;
@@ -60,14 +66,92 @@ public partial class ProductionReportViewModel : ObservableObject
         BuildCommand.NotifyCanExecuteChanged();
     }
 
-    partial void OnLogFolderChanged(string value) => ImportCommand.NotifyCanExecuteChanged();
+    partial void OnLogFolderChanged(string value)
+    {
+        ImportCommand.NotifyCanExecuteChanged();
+        DescribeFolder();
+    }
+
+    partial void OnEachSubfolderIsAMachineChanged(bool value)
+    {
+        ImportCommand.NotifyCanExecuteChanged();
+        DescribeFolder();
+    }
+
+    /// <summary>
+    /// Opens a folder picker and reads the machine's serial out of the folder name, because the
+    /// production logs themselves carry no machine identity at all.
+    /// </summary>
+    [RelayCommand]
+    private void BrowseForFolder()
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "Choose the folder holding the ProdLogV2 files",
+            InitialDirectory = Directory.Exists(LogFolder.Trim()) ? LogFolder.Trim() : null
+        };
+
+        if (dialog.ShowDialog() != true) return;
+
+        LogFolder = dialog.FolderName;
+
+        // Only fill the serial in where the user has not typed one, so a picker never overwrites
+        // what somebody deliberately entered.
+        if (SerialNumber.Trim().Length == 0 && ProductionSerial.FromPath(LogFolder) is { } found)
+        {
+            SerialNumber = found;
+            StatusMessage = $"Serial {found} taken from the folder name. Change it if that is wrong.";
+        }
+    }
+
+    /// <summary>Says what the chosen folder looks like before anything is read from it.</summary>
+    private void DescribeFolder()
+    {
+        var folder = LogFolder.Trim();
+
+        if (folder.Length == 0)
+        {
+            FolderHint = string.Empty;
+            return;
+        }
+
+        if (!Directory.Exists(folder))
+        {
+            FolderHint = "That folder does not exist.";
+            return;
+        }
+
+        if (EachSubfolderIsAMachine)
+        {
+            var machines = ProductionSerial.MachineFolders(folder);
+            var named = machines.Where(m => m.Serial is not null).ToList();
+
+            FolderHint = machines.Count == 0
+                ? "No sub-folder here holds any ProdLogV2 files."
+                : $"{machines.Count} sub-folder(s) with production logs, {named.Count} with a serial "
+                  + $"in the name: {string.Join(", ", named.Select(m => m.Serial).Take(6))}"
+                  + (named.Count > 6 ? ", ..." : string.Empty);
+
+            return;
+        }
+
+        FolderHint = ProductionSerial.HoldsProductionLogs(folder)
+            ? "ProdLogV2 files found in this folder."
+            : "No ProdLogV2 files in this folder or below it.";
+    }
 
     private ShiftModel Shift => ShiftModelIndex == 1
         ? ShiftModel.CartersAucklandRoundTheClock
         : ShiftModel.SingleDayShift;
 
+    /// <summary>
+    /// A sweep across sub-folders takes each machine's serial from its own folder name, so the
+    /// serial box is not needed for it.
+    /// </summary>
     private bool CanImport() =>
-        !IsBusy && SerialNumber.Trim().Length > 0 && LogFolder.Trim().Length > 0;
+        !IsBusy
+        && LogFolder.Trim().Length > 0
+        && (EachSubfolderIsAMachine || SerialNumber.Trim().Length > 0);
 
     private bool CanBuild() => !IsBusy && SerialNumber.Trim().Length > 0;
 
@@ -80,7 +164,16 @@ public partial class ProductionReportViewModel : ObservableObject
 
         try
         {
-            var result = await _import.ImportFolderAsync(LogFolder.Trim(), SerialNumber.Trim(), ReplaceExisting);
+            var result = EachSubfolderIsAMachine
+                ? await _import.ImportMachineFoldersAsync(LogFolder.Trim(), ReplaceExisting)
+                : await _import.ImportFolderAsync(LogFolder.Trim(), SerialNumber.Trim(), ReplaceExisting);
+
+            // A sweep can pull in several machines; leave the box on one of them so a report can
+            // be built straight away.
+            if (EachSubfolderIsAMachine && result.Serials.Count > 0 && SerialNumber.Trim().Length == 0)
+            {
+                SerialNumber = result.Serials[0];
+            }
 
             StatusMessage = result.Summary;
             foreach (var note in result.Notes) StatusMessage += Environment.NewLine + note;

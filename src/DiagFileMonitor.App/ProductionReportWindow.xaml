@@ -31,7 +31,7 @@
                     <StackPanel>
                         <TextBlock Text="Which machine" Style="{StaticResource SectionHeading}" />
                         <TextBlock TextWrapping="Wrap" Foreground="{StaticResource BrandGrey}" Margin="0,0,0,8"
-                                   Text="The production log does not carry a serial number, so it has to be typed. It is what the stored weeks are filed under." />
+                                   Text="ProdLogV2 files carry no machine identity at all - not in the file, not in the file name. Browsing to a folder reads the serial out of the folder name where there is one; otherwise type it. It is what the stored weeks are filed under." />
 
                         <TextBlock Text="Serial number" Margin="0,0,0,4" />
                         <TextBox Text="{Binding SerialNumber, UpdateSourceTrigger=PropertyChanged}"
@@ -50,12 +50,19 @@
                     <StackPanel>
                         <TextBlock Text="Import weekly logs" Style="{StaticResource SectionHeading}" />
                         <TextBlock TextWrapping="Wrap" Foreground="{StaticResource BrandGrey}" Margin="0,0,0,8"
-                                   Text="Point this at a folder of ProdLogV2 files. Sub-folders are read too, and a week already stored is skipped rather than counted twice." />
+                                   Text="Point this at a folder of ProdLogV2 files. Sub-folders are read too, and a week already stored is skipped rather than counted twice. Tick the box below if you are pointing at a parent folder with one folder per machine." />
 
                         <TextBlock Text="Folder" Margin="0,0,0,4" />
-                        <TextBox Text="{Binding LogFolder, UpdateSourceTrigger=PropertyChanged}"
-                                 Margin="0,0,0,8" />
+                        <DockPanel Margin="0,0,0,4">
+                            <Button DockPanel.Dock="Right" Content="Browse..." Width="90" Margin="8,0,0,0"
+                                    Command="{Binding BrowseForFolderCommand}" />
+                            <TextBox Text="{Binding LogFolder, UpdateSourceTrigger=PropertyChanged}" />
+                        </DockPanel>
+                        <TextBlock Text="{Binding FolderHint}" TextWrapping="Wrap"
+                                   Foreground="{StaticResource BrandGrey}" Margin="0,0,0,8" />
 
+                        <CheckBox Content="Each sub-folder is a different machine, named by its serial"
+                                  IsChecked="{Binding EachSubfolderIsAMachine}" Margin="0,0,0,4" />
                         <CheckBox Content="Re-read weeks already stored, replacing them"
                                   IsChecked="{Binding ReplaceExisting}" Margin="0,0,0,10" />
 

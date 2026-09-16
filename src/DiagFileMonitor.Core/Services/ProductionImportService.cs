@@ -13,10 +13,26 @@ public class ProductionImportResult
     public int PanelsStored { get; init; }
     public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
 
-    public string Summary => FilesRead == 0
-        ? "Nothing new to import."
-        : $"Read {FilesRead} week(s), stored {PanelsStored} panel(s)."
-          + (FilesSkippedAlreadyStored > 0 ? $" Skipped {FilesSkippedAlreadyStored} already held." : string.Empty);
+    /// <summary>Which machines this import touched, for a sweep across several folders.</summary>
+    public IReadOnlyList<string> Serials { get; init; } = Array.Empty<string>();
+
+    public string Summary
+    {
+        get
+        {
+            if (FilesRead == 0 && FilesSkippedAlreadyStored == 0) return "Nothing new to import.";
+
+            var machines = Serials.Count > 1 ? $" across {Serials.Count} machines" : string.Empty;
+            var read = FilesRead == 0
+                ? "Nothing new to read"
+                : $"Read {FilesRead} week(s), stored {PanelsStored:N0} panel(s){machines}";
+
+            return read + "."
+                   + (FilesSkippedAlreadyStored > 0
+                       ? $" Skipped {FilesSkippedAlreadyStored} week(s) already held."
+                       : string.Empty);
+        }
+    }
 }
 
 /// <summary>
@@ -159,6 +175,64 @@ public class ProductionImportService
             FilesSkippedAlreadyStored = skippedHeld,
             FilesSkippedNotProdLog = skippedNotProd,
             PanelsStored = panelsStored,
+            Serials = read > 0 || skippedHeld > 0 ? new[] { serialNumber } : Array.Empty<string>(),
+            Notes = notes
+        };
+    }
+
+    /// <summary>
+    /// Reads a folder that holds one sub-folder per machine, taking each machine's serial from its
+    /// own folder name.
+    /// <para>
+    /// This is how these exports usually arrive, and it is the only thing that says which machine a
+    /// set of logs belongs to - ProdLogV2 carries no identity of its own. A sub-folder whose name
+    /// does not contain a serial is left alone rather than filed under a guess.
+    /// </para>
+    /// </summary>
+    public async Task<ProductionImportResult> ImportMachineFoldersAsync(
+        string root, bool replaceExisting = false, CancellationToken token = default)
+    {
+        var folders = ProductionSerial.MachineFolders(root);
+
+        if (folders.Count == 0)
+        {
+            return new ProductionImportResult
+            {
+                Notes = new[] { $"No sub-folder of {root} holds any ProdLogV2 files." }
+            };
+        }
+
+        var notes = new List<string>();
+        var serials = new List<string>();
+        int read = 0, skippedHeld = 0, skippedNotProd = 0, panels = 0;
+
+        foreach (var (folder, serial) in folders)
+        {
+            if (serial is null)
+            {
+                notes.Add($"{Path.GetFileName(folder)}: no serial number in the folder name, so it "
+                          + "was skipped. Rename it or import it on its own.");
+                continue;
+            }
+
+            var result = await ImportFolderAsync(folder, serial, replaceExisting, token);
+
+            read += result.FilesRead;
+            skippedHeld += result.FilesSkippedAlreadyStored;
+            skippedNotProd += result.FilesSkippedNotProdLog;
+            panels += result.PanelsStored;
+
+            if (result.FilesRead > 0 || result.FilesSkippedAlreadyStored > 0) serials.Add(serial);
+            foreach (var note in result.Notes) notes.Add($"{serial}: {note}");
+        }
+
+        return new ProductionImportResult
+        {
+            FilesRead = read,
+            FilesSkippedAlreadyStored = skippedHeld,
+            FilesSkippedNotProdLog = skippedNotProd,
+            PanelsStored = panels,
+            Serials = serials,
             Notes = notes
         };
     }

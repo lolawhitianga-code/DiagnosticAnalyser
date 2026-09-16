@@ -93,9 +93,14 @@ overnight gap those reports flag as not being on any official break sheet. Apply
 M21737 gives 56.7% - but nobody has confirmed PlaceMakers runs round the clock, and if it runs a
 single shift the real figure is different. *To settle: confirm the shift pattern per site.*
 
-**6. Serial numbers are typed in, not read.** ProdLogV2 carries no machine identity - not in the
-file, not in the name. The importer files weeks under whatever serial is entered. *To settle: is
-there a manifest alongside these exports, or does the folder name carry it?*
+**6. Serial numbers come from the folder, not the file.** ProdLogV2 carries no machine identity -
+not in the file, not in the name. **Browse...** reads the serial out of the folder name
+(`D:\Production\M21737\Reports` gives M21737, deepest folder first), and ticking *each sub-folder
+is a different machine* sweeps a parent folder and files each one under its own name. A folder
+whose name has no serial in it is skipped and said out loud rather than filed under a guess. Model
+names are deliberately not matched - TornadoM450 and SprintM600 are types, and filing production
+under a type would merge every machine of that type into one set of figures. *Still open: whether a
+manifest ships alongside these exports that would settle identity properly.*
 
 **7. `MemberCut` is rare and unused.** 13 events in ten weeks. Parsed and kept, never counted.
 

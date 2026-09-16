@@ -1,3 +1,4 @@
+using DiagFileMonitor.Core.Services;
 using DiagFileMonitor.Core.Production;
 using DiagFileMonitor.Core.Reports;
 
@@ -408,5 +409,128 @@ public class ProductionReportTests
 
         Assert.DoesNotContain("http://", html);
         Assert.DoesNotContain("https://", html);
+    }
+}
+
+public class ProductionSerialTests
+{
+    [Theory]
+    [InlineData(@"D:\Production\M21737", "M21737")]
+    [InlineData(@"D:\Production\M21737\Reports", "M21737")]
+    [InlineData(@"D:\Production\AOR1694\SDN\Reports", "AOR1694")]
+    [InlineData(@"D:\logs\AOR1613 Carters Line 3", "AOR1613")]
+    [InlineData(@"D:\logs\DGM20771 TrussTech", "DGM20771")]
+    [InlineData(@"D:\logs\M21642-1", "M21642-1")]
+    [InlineData("/mnt/exports/m20716/reports", "M20716")]
+    public void ReadsTheSerialOutOfAFolderName(string path, string expected)
+    {
+        Assert.Equal(expected, ProductionSerial.FromPath(path));
+    }
+
+    [Fact]
+    public void TheDeepestFolderWithASerialWins()
+    {
+        // A parent folder can carry a serial too. The one closest to the files is the right answer.
+        Assert.Equal("M21844", ProductionSerial.FromPath(@"D:\M21737 old\M21844\Reports"));
+    }
+
+    [Theory]
+    [InlineData(@"D:\Production\Reports")]
+    [InlineData(@"D:\Production\Line 3")]
+    [InlineData(@"D:\Production\2026 exports")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void SaysNothingRatherThanGuessing(string? path)
+    {
+        Assert.Null(ProductionSerial.FromPath(path));
+    }
+
+    [Theory]
+    [InlineData(@"D:\Machines\TornadoM450\Reports")]
+    [InlineData(@"D:\Machines\SprintM600")]
+    [InlineData(@"D:\Machines\TornadoM500 logs")]
+    public void AModelNameIsNotMistakenForASerial(string path)
+    {
+        // M450, M600 and M500 are machine types. Filing a machine's production under its model
+        // name would merge every machine of that type into one set of figures.
+        Assert.Null(ProductionSerial.FromPath(path));
+    }
+}
+
+public class MachineFolderSweepTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "sweeptests", Guid.NewGuid().ToString("N"));
+
+    public MachineFolderSweepTests() => Directory.CreateDirectory(_root);
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_root, recursive: true); } catch { /* best effort */ }
+    }
+
+    private void Machine(string folder, params string[] weeks)
+    {
+        var path = Path.Combine(_root, folder);
+        Directory.CreateDirectory(path);
+
+        foreach (var week in weeks)
+        {
+            File.WriteAllText(Path.Combine(path, week),
+                "PanelAssembled, 20260706 07:13:09, 8, 28, 0.139, 3, 8.3, 5, 20\r\n");
+        }
+    }
+
+    [Fact]
+    public void FindsEachMachineFolderAndItsSerial()
+    {
+        Machine("M21737", "ProdLogV22026W28.log");
+        Machine("AOR1694 Carters Line 3", "ProdLogV22026W29.log");
+
+        var found = ProductionSerial.MachineFolders(_root);
+
+        Assert.Equal(2, found.Count);
+        Assert.Contains(found, f => f.Serial == "M21737");
+        Assert.Contains(found, f => f.Serial == "AOR1694");
+    }
+
+    [Fact]
+    public void AFolderWithNoProductionLogsIsNotAMachine()
+    {
+        Machine("M21737", "ProdLogV22026W28.log");
+        Directory.CreateDirectory(Path.Combine(_root, "M21844 empty"));
+        File.WriteAllText(Path.Combine(_root, "M21844 empty", "notes.txt"), "nothing here");
+
+        Assert.Equal("M21737", Assert.Single(ProductionSerial.MachineFolders(_root)).Serial);
+    }
+
+    [Fact]
+    public void AMachineFolderWithNoSerialInItsNameIsReportedNotGuessedAt()
+    {
+        Machine("Line 3", "ProdLogV22026W28.log");
+
+        var found = Assert.Single(ProductionSerial.MachineFolders(_root));
+        Assert.Null(found.Serial);
+    }
+
+    [Fact]
+    public async Task SweepingAParentFolderFilesEachMachineUnderItsOwnSerial()
+    {
+        Machine("M21737", "ProdLogV22026W28.log");
+        Machine("AOR1694", "ProdLogV22026W29.log");
+        Machine("Line 3 no serial", "ProdLogV22026W30.log");
+
+        using var env = new TestEnvironment();
+        var import = new ProductionImportService(env.CreateContext);
+
+        var result = await import.ImportMachineFoldersAsync(_root);
+
+        Assert.Equal(2, result.FilesRead);
+        Assert.Equal(new[] { "AOR1694", "M21737" }, result.Serials.OrderBy(s => s).ToArray());
+
+        // The unnamed folder is left alone and said out loud, not filed under a guess.
+        Assert.Contains(result.Notes, n => n.Contains("no serial number in the folder name"));
+
+        var stored = await import.StoredMachinesAsync();
+        Assert.Equal(2, stored.Count);
     }
 }
