@@ -159,6 +159,33 @@ self-contained and offline the same way.
 | `Services/ProductionImportService.cs` | Import, de-duplicate by week, load back |
 | `Reports/ProductionReport.cs` | Builds the report model |
 
+## The folder layout these arrive in
+
+```
+D:\Raw logs\
+  M21737 raked extruder 4.8\
+    SDN\Reports\ProdLogV22026W28.log
+                 ProdLogV22026W29.log
+                 ShiftLog2019W28.log      <- left alone
+                 LatestReport.txt         <- the bundle's own copy
+  AOR1694 line 3\
+    SDN\Reports\...
+```
+
+Point **Browse...** at the top folder, tick **each sub-folder is a different machine**, and every
+machine is read under the serial in its own folder name. The logs can sit any number of levels
+down - the whole tree under each machine folder is searched - so the unpacked bundle structure
+needs no flattening.
+
+Files that are not read are counted and named rather than passed over silently:
+
+| | What happens |
+|---|---|
+| `ProdLogV2<year>W<week>.log` | Read |
+| An empty one | Skipped. A zero byte log is a file with nothing in it, not a week the machine stood idle - storing it would put a phantom shutdown in the machine's history |
+| `ProdLog<year>W<week>.log` | **Recognised, not read.** Same naming without the V2. No one has supplied one with data in it, and guessing a file format is how this project has gone wrong before |
+| `ShiftLog…`, `.txt`, `.zip` | Left alone |
+
 ## A week is imported once
 
 A week is identified by serial plus ISO week from the file name, not by path - exports carry a

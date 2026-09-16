@@ -19,6 +19,15 @@ public static class ProdLogParser
     private static readonly Regex FileNamePattern =
         new(@"ProdLogV2(?<year>\d{4})W(?<week>\d{1,2})\.log$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    /// <summary>
+    /// The same naming without the V2 - ProdLog2020W07.log. Older exports carry these alongside
+    /// the V2 files. They are recognised so they can be reported rather than silently lumped in
+    /// with the ShiftLogs, but they are not read: nobody has supplied one with data in it, and
+    /// guessing at a file format is how this project has gone wrong before.
+    /// </summary>
+    private static readonly Regex OlderNamePattern =
+        new(@"ProdLog(?<year>\d{4})W(?<week>\d{1,2})\.log$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private static readonly Dictionary<string, ProdLogEventKind> Names = new(StringComparer.OrdinalIgnoreCase)
     {
         ["PanelStarted"] = ProdLogEventKind.PanelStarted,
@@ -127,6 +136,11 @@ public static class ProdLogParser
     }
 
     public static bool LooksLikeProdLog(string fileName) => WeekFromFileName(fileName) is not null;
+
+    /// <summary>A production log named the older way, without the V2. Recognised, not read.</summary>
+    public static bool LooksLikeOlderProdLog(string fileName) =>
+        !LooksLikeProdLog(fileName ?? string.Empty)
+        && OlderNamePattern.IsMatch(fileName ?? string.Empty);
 
     /// <summary>
     /// Whether a file holds production events, judged on what is in it rather than what it is

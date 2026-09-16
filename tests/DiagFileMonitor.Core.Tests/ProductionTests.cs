@@ -694,3 +694,131 @@ public class BundleProductionTests
         Assert.Equal(2, (await env.Production.LoadPanelsAsync("M20716")).Count);
     }
 }
+
+/// <summary>
+/// The layout production logs actually arrive in: a top folder, one folder per machine named with
+/// its serial, and the unpacked bundle under each - so the logs sit several levels down in
+/// <c>&lt;machine&gt;\SDN\Reports</c>.
+/// </summary>
+public class RawLogsFolderTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "rawlogs", Guid.NewGuid().ToString("N"));
+
+    private const string OneWeek = """
+        PanelStarted, 20260706 07:10:00, E-1D
+        MemberAssembled, 20260706 07:11:00, 1, 0, Q, 0.01, 2.381
+        PanelAssembled, 20260706 07:13:09, 8, E-1D, 0.139, 3, 2.8, 1, 20
+        """;
+
+    public RawLogsFolderTests() => Directory.CreateDirectory(_root);
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_root, recursive: true); } catch { /* best effort */ }
+    }
+
+    private string Reports(string machineFolder)
+    {
+        var path = Path.Combine(_root, machineFolder, "SDN", "Reports");
+        Directory.CreateDirectory(path);
+        return path;
+    }
+
+    [Fact]
+    public void AMachineIsFoundThroughTheUnpackedBundleBelowIt()
+    {
+        // The logs are three levels down, and the folder is named with more than the serial.
+        File.WriteAllText(Path.Combine(Reports("M21737 raked extruder 4.8"), "ProdLogV22026W28.log"), OneWeek);
+
+        var found = Assert.Single(ProductionSerial.MachineFolders(_root));
+        Assert.Equal("M21737", found.Serial);
+    }
+
+    [Fact]
+    public async Task EachMachineFolderIsReadUnderItsOwnSerial()
+    {
+        File.WriteAllText(Path.Combine(Reports("M21737 raked extruder 4.8"), "ProdLogV22026W28.log"), OneWeek);
+        File.WriteAllText(Path.Combine(Reports("AOR1694 line 3"), "ProdLogV22026W30.log"), OneWeek);
+
+        using var env = new TestEnvironment();
+        var result = await new ProductionImportService(env.CreateContext).ImportMachineFoldersAsync(_root);
+
+        Assert.Equal(2, result.FilesRead);
+        Assert.Equal(new[] { "AOR1694", "M21737" }, result.Serials.OrderBy(s => s).ToArray());
+    }
+
+    [Fact]
+    public async Task AnEmptyWeekIsNotStoredAsAWeekWithNoProduction()
+    {
+        // A zero byte log is a file with nothing in it, not a week the machine sat idle. Storing
+        // it would put a phantom shutdown in the machine's history.
+        var reports = Reports("M21737");
+        File.WriteAllText(Path.Combine(reports, "ProdLogV22026W28.log"), OneWeek);
+        File.WriteAllText(Path.Combine(reports, "ProdLogV22020W06.log"), string.Empty);
+
+        using var env = new TestEnvironment();
+        var import = new ProductionImportService(env.CreateContext);
+        var result = await import.ImportMachineFoldersAsync(_root);
+
+        Assert.Equal(1, result.FilesRead);
+        Assert.Equal(1, result.FilesEmpty);
+        Assert.Contains(result.Notes, n => n.Contains("empty"));
+        Assert.Equal(1, Assert.Single(await import.StoredMachinesAsync()).Weeks);
+    }
+
+    [Fact]
+    public async Task TheOlderProdLogNamingIsReportedRatherThanLumpedInWithTheShiftLogs()
+    {
+        // ProdLog2020W07.log is the same naming without the V2. It is recognised so it can be
+        // asked about, but not read - nobody has supplied one with data in it.
+        var reports = Reports("M21737");
+        File.WriteAllText(Path.Combine(reports, "ProdLogV22026W28.log"), OneWeek);
+        File.WriteAllText(Path.Combine(reports, "ProdLog2020W07.log"), OneWeek);
+        File.WriteAllText(Path.Combine(reports, "ShiftLog2019W28.log"), "something else");
+
+        using var env = new TestEnvironment();
+        var result = await new ProductionImportService(env.CreateContext).ImportMachineFoldersAsync(_root);
+
+        Assert.Equal(1, result.FilesRead);
+        Assert.Equal(1, result.FilesInOlderFormat);
+        Assert.Equal(1, result.FilesSkippedNotProdLog);
+        Assert.Contains(result.Notes, n => n.Contains("older way"));
+    }
+
+    [Theory]
+    [InlineData("ProdLog2020W07.log", true)]
+    [InlineData("ProdLog2026W7.log", true)]
+    [InlineData("ProdLogV22026W37.log", false)]   // the current naming is read, not flagged
+    [InlineData("ShiftLog2019W28.log", false)]
+    [InlineData("LatestReport.txt", false)]
+    public void TheOlderNamingIsToldApartFromEverythingElse(string name, bool older)
+    {
+        Assert.Equal(older, ProdLogParser.LooksLikeOlderProdLog(name));
+    }
+
+    [Fact]
+    public void AFolderWithNoProductionLogsIsNotAMachine()
+    {
+        File.WriteAllText(Path.Combine(Reports("M21737"), "ProdLogV22026W28.log"), OneWeek);
+        Directory.CreateDirectory(Path.Combine(_root, "Notes only"));
+        File.WriteAllText(Path.Combine(_root, "Notes only", "readme.txt"), "nothing here");
+
+        Assert.Equal("M21737", Assert.Single(ProductionSerial.MachineFolders(_root)).Serial);
+    }
+
+    [Fact]
+    public async Task ReadingTheSameRootTwiceDoesNotDoubleAnything()
+    {
+        File.WriteAllText(Path.Combine(Reports("M21737"), "ProdLogV22026W28.log"), OneWeek);
+
+        using var env = new TestEnvironment();
+        var import = new ProductionImportService(env.CreateContext);
+
+        await import.ImportMachineFoldersAsync(_root);
+        var again = await import.ImportMachineFoldersAsync(_root);
+
+        Assert.Equal(0, again.FilesRead);
+        Assert.Equal(1, again.FilesSkippedAlreadyStored);
+        Assert.Equal(1, Assert.Single(await import.StoredMachinesAsync()).Panels);
+    }
+}

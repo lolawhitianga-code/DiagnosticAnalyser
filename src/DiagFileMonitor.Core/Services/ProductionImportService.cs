@@ -11,6 +11,12 @@ public class ProductionImportResult
     public int FilesRead { get; init; }
     public int FilesSkippedAlreadyStored { get; init; }
     public int FilesSkippedNotProdLog { get; init; }
+
+    /// <summary>Files named the older ProdLog way, without the V2. Seen and not read.</summary>
+    public int FilesInOlderFormat { get; init; }
+
+    /// <summary>Weeks whose file held no events at all - a zero byte log.</summary>
+    public int FilesEmpty { get; init; }
     public int PanelsStored { get; init; }
     public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
 
@@ -71,17 +77,20 @@ public class ProductionImportService
         CancellationToken token = default)
     {
         var notes = new List<string>();
-        int read = 0, skippedHeld = 0, skippedNotProd = 0, panelsStored = 0;
+        int read = 0, skippedHeld = 0, skippedNotProd = 0, panelsStored = 0, older = 0, empty = 0;
 
         // Same week in two folders: keep one. Ordering by week keeps the import in time order.
         var candidates = new Dictionary<(int Year, int Week), string>();
 
         foreach (var path in paths)
         {
-            var week = ProdLogParser.WeekFromFileName(Path.GetFileName(path));
+            var name = Path.GetFileName(path);
+            var week = ProdLogParser.WeekFromFileName(name);
+
             if (week is null)
             {
-                skippedNotProd++;
+                if (ProdLogParser.LooksLikeOlderProdLog(name)) older++;
+                else skippedNotProd++;
                 continue;
             }
 
@@ -100,6 +109,15 @@ public class ProductionImportService
             token.ThrowIfCancellationRequested();
 
             var parsed = ProdLogParser.ParseFile(path);
+
+            // A zero byte week is not a week with no production - it is a file with nothing in it.
+            // Storing it would put an empty week in the history and read as a shutdown.
+            if (parsed.Events.Count == 0)
+            {
+                empty++;
+                continue;
+            }
+
             var classified = new PanelClassifier(_options).Classify(parsed.Events);
 
             var stored = await StoreAsync(new StoreRequest
@@ -126,14 +144,23 @@ public class ProductionImportService
             notes.AddRange(stored.Notes);
         }
 
+        if (empty > 0)
+            notes.Add($"{empty} ProdLogV2 file(s) were empty and were not stored.");
+
+        if (older > 0)
+            notes.Add($"{older} file(s) are named the older way, ProdLog without the V2. They are not "
+                      + "read - send one with data in it if those weeks matter.");
+
         if (skippedNotProd > 0)
-            notes.Add($"{skippedNotProd} file(s) were not named like a ProdLogV2 week and were left alone.");
+            notes.Add($"{skippedNotProd} other .log file(s) were left alone - ShiftLogs and the like.");
 
         return new ProductionImportResult
         {
             FilesRead = read,
             FilesSkippedAlreadyStored = skippedHeld,
             FilesSkippedNotProdLog = skippedNotProd,
+            FilesInOlderFormat = older,
+            FilesEmpty = empty,
             PanelsStored = panelsStored,
             Serials = read > 0 || skippedHeld > 0 ? new[] { serialNumber } : Array.Empty<string>(),
             Notes = notes
@@ -164,7 +191,7 @@ public class ProductionImportService
 
         var notes = new List<string>();
         var serials = new List<string>();
-        int read = 0, skippedHeld = 0, skippedNotProd = 0, panels = 0;
+        int read = 0, skippedHeld = 0, skippedNotProd = 0, panels = 0, older = 0, empty = 0;
 
         foreach (var (folder, serial) in folders)
         {
@@ -180,6 +207,8 @@ public class ProductionImportService
             read += result.FilesRead;
             skippedHeld += result.FilesSkippedAlreadyStored;
             skippedNotProd += result.FilesSkippedNotProdLog;
+            older += result.FilesInOlderFormat;
+            empty += result.FilesEmpty;
             panels += result.PanelsStored;
 
             if (result.FilesRead > 0 || result.FilesSkippedAlreadyStored > 0) serials.Add(serial);
@@ -191,6 +220,8 @@ public class ProductionImportService
             FilesRead = read,
             FilesSkippedAlreadyStored = skippedHeld,
             FilesSkippedNotProdLog = skippedNotProd,
+            FilesInOlderFormat = older,
+            FilesEmpty = empty,
             PanelsStored = panels,
             Serials = serials,
             Notes = notes
