@@ -2,7 +2,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
-using System.Windows.Media;
 using DiagFileMonitor.App.Services;
 using DiagFileMonitor.Core.Help;
 
@@ -64,7 +63,7 @@ public class HelpPopupHost
             FontWeight = FontWeights.SemiBold,
             FontSize = 14,
             Margin = new Thickness(0, 0, 0, 8),
-            Foreground = Brush("BrandBlueDark", Color.FromRgb(0x00, 0x84, 0xB6))
+            Foreground = ThemeBrush("BrandBlueDark", System.Windows.Media.Color.FromRgb(0x00, 0x84, 0xB6))
         });
 
         content.Children.Add(body);
@@ -72,8 +71,8 @@ public class HelpPopupHost
         return new Border
         {
             Width = Width,
-            Background = Brushes.White,
-            BorderBrush = Brush("PanelBorder", Color.FromRgb(0xDC, 0xE4, 0xE8)),
+            Background = System.Windows.Media.Brushes.White,
+            BorderBrush = ThemeBrush("PanelBorder", System.Windows.Media.Color.FromRgb(0xDC, 0xE4, 0xE8)),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(4),
             Child = content,
@@ -82,7 +81,7 @@ public class HelpPopupHost
                 BlurRadius = 10,
                 ShadowDepth = 2,
                 Opacity = 0.2,
-                Color = Colors.Black
+                Color = System.Windows.Media.Colors.Black
             }
         };
     }
@@ -118,10 +117,11 @@ public class HelpPopupHost
         return element;
     }
 
-    private static Brush Brush(string themeKey, Color fallback)
+    private static System.Windows.Media.Brush ThemeBrush(string themeKey, System.Windows.Media.Color fallback)
     {
-        if (System.Windows.Application.Current?.TryFindResource(themeKey) is Brush found) return found;
+        if (System.Windows.Application.Current?.TryFindResource(themeKey) is System.Windows.Media.Brush found)
+            return found;
 
-        return new SolidColorBrush(fallback);
+        return new System.Windows.Media.SolidColorBrush(fallback);
     }
 }

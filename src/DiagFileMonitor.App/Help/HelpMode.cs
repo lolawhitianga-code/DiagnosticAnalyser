@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows.Input;
 using DiagFileMonitor.App.Services;
 
 namespace DiagFileMonitor.App.Help;
@@ -18,7 +17,7 @@ public class HelpMode
     private readonly HelpPopupHost _popup = new();
 
     private bool _on;
-    private Cursor? _previousCursor;
+    private System.Windows.Input.Cursor? _previousCursor;
 
     /// <summary>
     /// The ? itself. The mode swallows every click while it is on, which would otherwise swallow
@@ -67,7 +66,7 @@ public class HelpMode
 
         _on = true;
         _previousCursor = _window.Cursor;
-        _window.Cursor = Cursors.Help;
+        _window.Cursor = System.Windows.Input.Cursors.Help;
 
         _window.PreviewMouseLeftButtonDown += OnClick;
         _window.PreviewKeyDown += OnKey;
@@ -109,15 +108,15 @@ public class HelpMode
         return false;
     }
 
-    private void OnKey(object sender, KeyEventArgs e)
+    private void OnKey(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        if (e.Key != Key.Escape) return;
+        if (e.Key != System.Windows.Input.Key.Escape) return;
 
         TurnOff();
         e.Handled = true;
     }
 
-    private void OnClick(object sender, MouseButtonEventArgs e)
+    private void OnClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         // Swallow it whatever happens next: a click in this mode must never press the button.
         e.Handled = true;
@@ -136,7 +135,7 @@ public class HelpMode
             return;
         }
 
-        var id = Help.TopicFor(clicked);
+        var id = DiagFileMonitor.App.Help.Help.TopicFor(clicked);
         var topic = HelpLibrary.Find(id);
 
         if (topic is null)

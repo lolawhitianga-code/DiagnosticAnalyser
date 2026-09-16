@@ -22,6 +22,29 @@
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.WindowsDesktop.App" />
+
+    <!--
+      The real App project sets UseWPF and UseWindowsForms, and each of those adds its own
+      namespaces to the implicit usings. Setting those properties here would import the targets
+      Ubuntu lacks, so the usings are added by hand instead.
+
+      This is not tidiness. Without it the two sets never collide here, and every ambiguity between
+      them - Cursor, Brush, Color, KeyEventArgs and more exist in both - compiles cleanly on Linux
+      and fails on Windows. That happened; hence this block.
+
+      The list is tuned to match the real build rather than to the documentation: System.Windows.Shapes
+      is deliberately absent, because with it Path.Combine is ambiguous everywhere and the Windows
+      build has no such trouble. If a real build ever fails on an ambiguity this does not reproduce,
+      add the namespace here so the next one is caught before it ships.
+    -->
+    <Using Include="System.Windows" />
+    <Using Include="System.Windows.Controls" />
+    <Using Include="System.Windows.Data" />
+    <Using Include="System.Windows.Documents" />
+    <Using Include="System.Windows.Input" />
+    <Using Include="System.Windows.Media" />
+    <Using Include="System.Drawing" />
+    <Using Include="System.Windows.Forms" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
   </ItemGroup>
   <ItemGroup>

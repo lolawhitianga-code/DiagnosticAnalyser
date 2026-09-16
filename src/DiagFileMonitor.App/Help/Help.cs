@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows.Media;
 
 namespace DiagFileMonitor.App.Help;
 
@@ -37,8 +36,8 @@ public static class Help
         {
             if (GetTopic(element) is { Length: > 0 } topic) return topic;
 
-            element = element is Visual or System.Windows.Media.Media3D.Visual3D
-                ? VisualTreeHelper.GetParent(element)
+            element = element is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D
+                ? System.Windows.Media.VisualTreeHelper.GetParent(element)
                 : LogicalTreeHelper.GetParent(element);
         }
 
