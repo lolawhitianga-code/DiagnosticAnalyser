@@ -8,7 +8,8 @@ import sys
 from pathlib import Path
 
 TOOLS = Path(__file__).parent
-APP = TOOLS.parent / "src/DiagFileMonitor.App"
+REPO = TOOLS.parent
+APP = REPO / "src/DiagFileMonitor.App"
 
 # Properties that come from WPF itself rather than our own types.
 WPF_PROVIDED = {
@@ -40,6 +41,44 @@ def ensure_dumpprops_built():
         print(f"FAILED to build dumpprops:\n{out.stdout}\n{out.stderr}")
         sys.exit(2)
 
+
+
+
+def check_help_topics():
+    """
+    The ? button looks a control's topic up in docs/HELP.md by id. A typo in an id is a popup that
+    silently says nothing, and a topic left behind after a control is renamed is help nobody can
+    reach. Neither shows up at build time.
+    """
+    problems = []
+
+    help_path = REPO / "docs" / "HELP.md"
+    if not help_path.exists():
+        return ["docs/HELP.md is missing - the ? button has nothing to read"]
+
+    defined = set(re.findall(r"<!--\s*help:([a-z0-9.]+)\s*-->", help_path.read_text()))
+
+    # Topics that are prose only - they explain something that is not a single control.
+    prose_only = {
+        "analysis.report",
+        "main.grid",
+    }
+
+    used = set()
+    for xaml_file in APP.rglob("*.xaml"):
+        for m in re.finditer(r"help:Help\.Topic=\"([^\"]+)\"", xaml_file.read_text()):
+            topic = m.group(1)
+            used.add(topic)
+            if topic not in defined:
+                problems.append(
+                    f"{xaml_file.name}: help topic '{topic}' is not in docs/HELP.md")
+
+    for topic in sorted(defined - used - prose_only):
+        problems.append(
+            f"docs/HELP.md: topic '{topic}' is not used by any control "
+            f"(tag a control with it, or list it in prose_only)")
+
+    return problems
 
 
 def check_command_guards():
@@ -131,6 +170,7 @@ def main():
 
     problems.extend(problems_at_start)
     problems.extend(check_command_guards())
+    problems.extend(check_help_topics())
 
     for xaml_file in sorted(APP.rglob("*.xaml")):
         text = xaml_file.read_text()

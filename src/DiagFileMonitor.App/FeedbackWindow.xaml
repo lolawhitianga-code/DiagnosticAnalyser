@@ -1,9 +1,12 @@
 <Window x:Class="DiagFileMonitor.App.FeedbackWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:help="clr-namespace:DiagFileMonitor.App.Help"
         Title="Send feedback to Claude" Height="720" Width="1040"
         WindowStartupLocation="CenterOwner" Background="{StaticResource AppBackground}">
     <DockPanel Margin="12">
+        <Button DockPanel.Dock="Top" x:Name="HelpModeButton" Style="{StaticResource HelpButton}"
+                HorizontalAlignment="Right" Margin="0,0,0,4" />
         <TextBlock DockPanel.Dock="Top" Text="{Binding Heading}" Style="{StaticResource WordmarkPrimary}"
                    Margin="0,0,0,4" />
         <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{StaticResource BrandGrey}"
@@ -14,9 +17,9 @@
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="Close" Width="90" Margin="8,0,0,0"
                         Click="Close_Click" />
-                <Button DockPanel.Dock="Right" Content="Show me the file" Width="130"
+                <Button DockPanel.Dock="Right" Content="Show me the file" help:Help.Topic="feedback.create" Width="130"
                         Command="{Binding OpenFolderCommand}" />
-                <Button DockPanel.Dock="Right" Content="Create package" Width="140" Margin="0,0,8,0"
+                <Button DockPanel.Dock="Right" Content="Create package" help:Help.Topic="feedback.create" Width="140" Margin="0,0,8,0"
                         Style="{StaticResource PrimaryButton}"
                         Command="{Binding CreatePackageCommand}" />
                 <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" VerticalAlignment="Center" />
@@ -32,7 +35,7 @@
 
             <Border Grid.Column="0" Style="{StaticResource Panel}">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="What the report said" FontWeight="SemiBold"
+                    <TextBlock DockPanel.Dock="Top" Text="What the report said" help:Help.Topic="analysis.report" FontWeight="SemiBold"
                                Margin="0,0,0,6" />
                     <TextBox Text="{Binding ReportText, Mode=OneWay}" IsReadOnly="True"
                              FontFamily="Consolas" FontSize="11" TextWrapping="NoWrap"
@@ -43,18 +46,18 @@
             <Border Grid.Column="2" Style="{StaticResource Panel}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
-                        <TextBlock Text="How did it do?" FontWeight="SemiBold" Margin="0,0,0,4" />
+                        <TextBlock Text="How did it do?" help:Help.Topic="feedback.verdict" FontWeight="SemiBold" Margin="0,0,0,4" />
                         <ComboBox ItemsSource="{Binding VerdictOptions}" SelectedIndex="{Binding VerdictIndex}"
                                   Margin="0,0,0,12" />
 
-                        <TextBlock Text="What was actually wrong?" FontWeight="SemiBold" />
+                        <TextBlock Text="What was actually wrong?" help:Help.Topic="feedback.whatwaswrong" FontWeight="SemiBold" />
                         <TextBlock Text="The real fault, in your words." Foreground="{StaticResource BrandGrey}"
                                    FontSize="11" Margin="0,0,0,4" />
                         <TextBox Text="{Binding WhatWasActuallyWrong, UpdateSourceTrigger=PropertyChanged}"
                                  AcceptsReturn="True" TextWrapping="Wrap" Height="90"
                                  VerticalScrollBarVisibility="Auto" Margin="0,0,0,12" />
 
-                        <TextBlock Text="How did you know?" FontWeight="SemiBold" />
+                        <TextBlock Text="How did you know?" help:Help.Topic="feedback.howyouknew" FontWeight="SemiBold" />
                         <TextBlock TextWrapping="Wrap" Foreground="{StaticResource BrandGrey}" FontSize="11"
                                    Margin="0,0,0,4"
                                    Text="Which lines or signals told you. This is the one that becomes code - &quot;the output came on and the confirm input never did&quot; can be checked, &quot;the saw was broken&quot; cannot." />
@@ -62,13 +65,13 @@
                                  AcceptsReturn="True" TextWrapping="Wrap" Height="110"
                                  VerticalScrollBarVisibility="Auto" Margin="0,0,0,12" />
 
-                        <TextBlock Text="What should the report have done?" FontWeight="SemiBold" />
+                        <TextBlock Text="What should the report have done?" help:Help.Topic="feedback.whatshouldchange" FontWeight="SemiBold" />
                         <TextBlock Text="Optional." Foreground="{StaticResource BrandGrey}"
                                    FontSize="11" Margin="0,0,0,4" />
                         <TextBox Text="{Binding WhatShouldChange}" AcceptsReturn="True" TextWrapping="Wrap"
                                  Height="70" VerticalScrollBarVisibility="Auto" Margin="0,0,0,12" />
 
-                        <TextBlock Text="Your name" FontWeight="SemiBold" />
+                        <TextBlock Text="Your name" help:Help.Topic="feedback.raisedby" FontWeight="SemiBold" />
                         <TextBlock Text="Optional, so a follow-up question has somewhere to go."
                                    Foreground="{StaticResource BrandGrey}" FontSize="11" Margin="0,0,0,4" />
                         <TextBox Text="{Binding RaisedBy}" />

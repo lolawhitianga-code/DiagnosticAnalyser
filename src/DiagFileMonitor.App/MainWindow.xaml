@@ -1,6 +1,7 @@
 <Window x:Class="DiagFileMonitor.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:help="clr-namespace:DiagFileMonitor.App.Help"
         Title="Diagnostic File Monitor" Height="700" Width="1220"
         MinHeight="520" MinWidth="900"
         Background="{StaticResource AppBackground}">
@@ -33,6 +34,8 @@
 
     <DockPanel>
         <Border DockPanel.Dock="Top" Style="{StaticResource BrandStrip}" />
+        <Button DockPanel.Dock="Top" x:Name="HelpModeButton" Style="{StaticResource HelpButton}"
+                HorizontalAlignment="Right" Margin="0,6,10,0" />
 
         <DockPanel Margin="10">
         <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
@@ -57,7 +60,7 @@
                     </DockPanel>
                 </Border>
 
-                <StackPanel Orientation="Horizontal">
+                <StackPanel Orientation="Horizontal" help:Help.Topic="main.stats">
                 <Border Style="{StaticResource StatTile}">
                     <StackPanel>
                         <TextBlock Text="{Binding Stats.ArrivedToday}" Style="{StaticResource StatValue}" />
@@ -99,69 +102,69 @@
             </DockPanel>
 
             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                <TextBlock Text="Watch folders:" VerticalAlignment="Top" Width="110" Margin="0,4,0,0" />
+                <TextBlock Text="Watch folders:" help:Help.Topic="main.watchfolders" VerticalAlignment="Top" Width="110" Margin="0,4,0,0" />
                 <ListBox ItemsSource="{Binding WatchFolders}" SelectedItem="{Binding SelectedWatchFolder}"
                          Width="420" Height="58" Margin="0,0,6,0" />
                 <StackPanel>
-                    <Button Content="Add folder..." Command="{Binding AddFolderCommand}" Width="90" Margin="0,0,0,4" />
-                    <Button Content="Remove" Command="{Binding RemoveFolderCommand}" Width="90"
+                    <Button Content="Add folder..." help:Help.Topic="main.watchfolders" Command="{Binding AddFolderCommand}" Width="90" Margin="0,0,0,4" />
+                    <Button Content="Remove" help:Help.Topic="main.watchfolders" Command="{Binding RemoveFolderCommand}" Width="90"
                             IsEnabled="{Binding SelectedWatchFolder, Converter={StaticResource NotNullConverter}}" />
                 </StackPanel>
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                <TextBlock Text="Extensions:" VerticalAlignment="Center" Width="110" />
+                <TextBlock Text="Extensions:" help:Help.Topic="main.extensions" VerticalAlignment="Center" Width="110" />
                 <TextBox Text="{Binding ExtensionsText, UpdateSourceTrigger=PropertyChanged}"
                          Width="200" Margin="0,0,6,0"
                          IsReadOnly="{Binding IsMonitoring}" />
                 <TextBlock Text="(e.g. .szip, .zip)" Style="{StaticResource Hint}" Margin="0,0,12,0" />
-                <TextBlock Text="Only files newer than" Style="{StaticResource FieldLabel}" Margin="0,0,6,0" />
+                <TextBlock Text="Only files newer than" help:Help.Topic="main.maxage" Style="{StaticResource FieldLabel}" Margin="0,0,6,0" />
                 <TextBox Text="{Binding MaxAgeDays, UpdateSourceTrigger=PropertyChanged}" Width="45" Margin="0,0,6,0"
                          ToolTip="Ignore bundles whose file name timestamp is older than this. 0 processes everything." />
                 <TextBlock Text="days" Style="{StaticResource FieldLabel}" Margin="0,0,16,0" />
 
-                <Button Content="Start Monitoring" Command="{Binding StartMonitoringCommand}"
+                <Button Content="Start Monitoring" help:Help.Topic="main.monitoring" Command="{Binding StartMonitoringCommand}"
                         Width="130" Margin="0,0,6,0"
                         IsEnabled="{Binding IsMonitoring, Converter={StaticResource InverseBoolConverter}}" />
-                <Button Content="Stop Monitoring" Command="{Binding StopMonitoringCommand}"
+                <Button Content="Stop Monitoring" help:Help.Topic="main.monitoring" Command="{Binding StopMonitoringCommand}"
                         Width="130" Margin="0,0,12,0" IsEnabled="{Binding IsMonitoring}" />
-                <CheckBox Content="Notify on arrival" IsChecked="{Binding NotifyOnArrival}" VerticalAlignment="Center" />
+                <CheckBox Content="Notify on arrival" help:Help.Topic="main.notify" IsChecked="{Binding NotifyOnArrival}" VerticalAlignment="Center" />
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                <TextBlock Text="Group by:" VerticalAlignment="Center" Width="110" />
+                <TextBlock Text="Group by:" help:Help.Topic="main.groupby" VerticalAlignment="Center" Width="110" />
                 <ComboBox ItemsSource="{Binding GroupByOptions}" SelectedItem="{Binding SelectedGroupBy}"
                           Width="180" Margin="0,0,12,0" />
-                <Button Content="Refresh" Command="{Binding LoadCommand}" Width="80" Margin="0,0,12,0" />
-                <Button Content="Search in logs..." Click="OpenLogSearch_Click" Width="130" Margin="0,0,20,0" />
-                <TextBlock Text="Keep extracts for" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <Button Content="Refresh" help:Help.Topic="main.refresh" Command="{Binding LoadCommand}" Width="80" Margin="0,0,12,0" />
+                <Button Content="Search in logs..." help:Help.Topic="main.logsearch" Click="OpenLogSearch_Click" Width="130" Margin="0,0,20,0" />
+                <TextBlock Text="Keep extracts for" help:Help.Topic="main.cleanup" VerticalAlignment="Center" Margin="0,0,6,0" />
                 <TextBox Text="{Binding RetentionDays, UpdateSourceTrigger=PropertyChanged}" Width="45" Margin="0,0,6,0"
                          ToolTip="Days to keep unpacked files. 0 keeps everything. Baselines are never removed." />
                 <TextBlock Text="days" VerticalAlignment="Center" Margin="0,0,6,0" />
-                <Button Content="Clean up now" Command="{Binding CleanUpNowCommand}" Width="105" Margin="0,0,12,0" />
-                <Button Content="Alerts and Zoho..." Click="OpenIntegrationSettings_Click" Width="130" Margin="0,0,12,0" />
-                <Button Content="Clear database..." Command="{Binding ClearDatabaseCommand}" Width="115" />
+                <Button Content="Clean up now" help:Help.Topic="main.cleanup" Command="{Binding CleanUpNowCommand}" Width="105" Margin="0,0,12,0" />
+                <Button Content="Alerts and Zoho..." help:Help.Topic="main.integrations" Click="OpenIntegrationSettings_Click" Width="130" Margin="0,0,12,0" />
+                <Button Content="Clear database..." help:Help.Topic="main.cleardatabase" Command="{Binding ClearDatabaseCommand}" Width="115" />
             </StackPanel>
 
             <Border Style="{StaticResource Panel}">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="Search:" VerticalAlignment="Center" Width="56" />
+                    <TextBlock Text="Search:" help:Help.Topic="main.search" VerticalAlignment="Center" Width="56" />
                     <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=200}"
                              Width="240" Margin="0,0,6,0"
                              ToolTip="Matches serial number, customer, file name, machine type or version. Multiple words all have to match." />
 
-                    <TextBlock Text="Status:" VerticalAlignment="Center" Margin="12,0,6,0" />
+                    <TextBlock Text="Status:" help:Help.Topic="main.statusfilter" VerticalAlignment="Center" Margin="12,0,6,0" />
                     <ComboBox ItemsSource="{Binding StatusFilterOptions}" SelectedItem="{Binding SelectedStatusFilter}"
                               Width="110" Margin="0,0,6,0" />
 
-                    <TextBlock Text="Arrived from:" VerticalAlignment="Center" Margin="12,0,6,0" />
+                    <TextBlock Text="Arrived from:" help:Help.Topic="main.datefilter" VerticalAlignment="Center" Margin="12,0,6,0" />
                     <DatePicker SelectedDate="{Binding FromDate}" Width="120" Margin="0,0,6,0" />
                     <TextBlock Text="to:" VerticalAlignment="Center" Margin="0,0,6,0" />
                     <DatePicker SelectedDate="{Binding ToDate}" Width="120" Margin="0,0,12,0" />
 
-                    <CheckBox Content="Baselines only" IsChecked="{Binding BaselinesOnly}"
+                    <CheckBox Content="Baselines only" help:Help.Topic="main.baselinesonly" IsChecked="{Binding BaselinesOnly}"
                               VerticalAlignment="Center" Margin="0,0,12,0" />
-                    <Button Content="Clear" Command="{Binding ClearFiltersCommand}" Width="70" Margin="0,0,12,0" />
+                    <Button Content="Clear" help:Help.Topic="main.clearfilters" Command="{Binding ClearFiltersCommand}" Width="70" Margin="0,0,12,0" />
                     <TextBlock Text="{Binding FilterSummary}" VerticalAlignment="Center" Foreground="Gray" />
                 </StackPanel>
             </Border>
@@ -171,24 +174,24 @@
             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                 <TextBlock Text="{Binding SelectionLabel}" Style="{StaticResource Hint}" Margin="0,0,8,0"
                            MaxWidth="220" TextTrimming="CharacterEllipsis" />
-                <Button Content="Analyse" Command="{Binding AnalyseSelectedCommand}" Width="80" Margin="0,0,6,0"
+                <Button Content="Analyse" help:Help.Topic="main.analyse" Command="{Binding AnalyseSelectedCommand}" Width="80" Margin="0,0,6,0"
                         Style="{StaticResource PrimaryButton}"
                         ToolTip="Read the logs in the selected bundle(s) and report what went wrong." />
-                <Button Content="Send to Claude" Command="{Binding SendFeedbackCommand}" Width="115" Margin="0,0,8,0"
+                <Button Content="Send to Claude" help:Help.Topic="main.sendtoclaude" Command="{Binding SendFeedbackCommand}" Width="115" Margin="0,0,8,0"
                         ToolTip="Tell Claude what this bundle really was, so the analysis gets better at cases like it." />
-                <Button Content="Compare" Command="{Binding CompareWithMasterCommand}" Width="80" Margin="0,0,6,0"
+                <Button Content="Compare" help:Help.Topic="main.compare" Command="{Binding CompareWithMasterCommand}" Width="80" Margin="0,0,6,0"
                         ToolTip="Measure the selected bundle against the benchmark master: step process, speed and settings." />
-                <Button Content="Report" Command="{Binding BuildReportCommand}" Width="80" Margin="0,0,6,0"
+                <Button Content="Report" help:Help.Topic="main.report" Command="{Binding BuildReportCommand}" Width="80" Margin="0,0,6,0"
                         ToolTip="Build an HTML report from the stored bundles: every fault occurrence across the fleet, or the case for a design change." />
-                <Button Content="Production" Command="{Binding BuildProductionReportCommand}" Width="90" Margin="0,0,12,0"
+                <Button Content="Production" help:Help.Topic="main.production" Command="{Binding BuildProductionReportCommand}" Width="90" Margin="0,0,12,0"
                         ToolTip="Read ProdLogV2 weekly production logs into this PC and build a production report: panels, cube, lineal metres and availability." />
-                <Button Content="Open folder" Command="{Binding OpenExtractedFolderCommand}" Width="100" Margin="0,0,6,0"
+                <Button Content="Open folder" help:Help.Topic="main.openfolder" Command="{Binding OpenExtractedFolderCommand}" Width="100" Margin="0,0,6,0"
                         IsEnabled="{Binding SelectedFile.HasExtractedFolder, FallbackValue=False}" />
-                <Button Content="errorlog.txt" Command="{Binding OpenErrorLogCommand}" Width="100" Margin="0,0,6,0"
+                <Button Content="errorlog.txt" help:Help.Topic="main.openlogs" Command="{Binding OpenErrorLogCommand}" Width="100" Margin="0,0,6,0"
                         IsEnabled="{Binding SelectedFile.HasErrorLog, FallbackValue=False}" />
-                <Button Content="machinelog.txt" Command="{Binding OpenMachineLogCommand}" Width="110" Margin="0,0,6,0"
+                <Button Content="machinelog.txt" help:Help.Topic="main.openlogs" Command="{Binding OpenMachineLogCommand}" Width="110" Margin="0,0,6,0"
                         IsEnabled="{Binding SelectedFile.HasMachineLog, FallbackValue=False}" />
-                <Button Content="changelog.txt" Command="{Binding OpenChangeLogCommand}" Width="105"
+                <Button Content="changelog.txt" help:Help.Topic="main.openlogs" Command="{Binding OpenChangeLogCommand}" Width="105"
                         IsEnabled="{Binding SelectedFile.HasChangeLog, FallbackValue=False}" />
             </StackPanel>
             <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource BrandNavy}" />
@@ -197,7 +200,7 @@
         <Border DockPanel.Dock="Right" Width="270" Margin="10,0,0,0" Padding="10"
                 Style="{StaticResource Panel}">
             <StackPanel>
-                <TextBlock Text="Case notes" Style="{StaticResource SectionHeading}" Margin="0,0,0,8" />
+                <TextBlock Text="Case notes" help:Help.Topic="main.casenotes" Style="{StaticResource SectionHeading}" Margin="0,0,0,8" />
                 <TextBlock Text="{Binding SelectedFile.OriginalFileName, FallbackValue='No file selected'}"
                            TextTrimming="CharacterEllipsis" Foreground="Gray" Margin="0,0,0,2" />
                 <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10">
@@ -219,10 +222,10 @@
                          AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
                          Height="220" Margin="0,0,0,10" />
 
-                <Button Content="Save notes" Command="{Binding SaveNotesCommand}" Height="28" Margin="0,0,0,6"
+                <Button Content="Save notes" help:Help.Topic="main.casenotes" Command="{Binding SaveNotesCommand}" Height="28" Margin="0,0,0,6"
                         Style="{StaticResource PrimaryButton}"
                         IsEnabled="{Binding SelectedFile, Converter={StaticResource NotNullConverter}}" />
-                <Button Content="Copy summary for ticket" Command="{Binding CopySummaryCommand}" Height="28"
+                <Button Content="Copy summary for ticket" help:Help.Topic="main.casenotes" Command="{Binding CopySummaryCommand}" Height="28"
                         IsEnabled="{Binding SelectedFile, Converter={StaticResource NotNullConverter}}" />
             </StackPanel>
         </Border>
@@ -249,7 +252,7 @@
             </DockPanel>
         </Border>
 
-        <DataGrid ItemsSource="{Binding FilesView}" SelectedItem="{Binding SelectedFile}"
+        <DataGrid help:Help.Topic="main.grid" ItemsSource="{Binding FilesView}" SelectedItem="{Binding SelectedFile}"
                   SelectionMode="Extended" SelectionChanged="FilesGrid_SelectionChanged"
                   AutoGenerateColumns="False" IsReadOnly="True"
                   CanUserAddRows="False" GridLinesVisibility="Horizontal" AlternationCount="2">
@@ -267,7 +270,7 @@
                                           IsEnabled="{Binding HasExtractedFolder}" />
                                 <MenuItem Header="_Analyse selected file(s)"
                                           Command="{Binding PlacementTarget.Tag.AnalyseSelectedCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                <MenuItem Header="Set as benchmark _master"
+                                <MenuItem Header="Set as benchmark _master" help:Help.Topic="main.setmaster"
                                           Command="{Binding PlacementTarget.Tag.SetMasterCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding}" />
                                 <MenuItem Header="Send _feedback to Claude"
@@ -276,10 +279,10 @@
                                 <MenuItem Header="Compare _with benchmark"
                                           Command="{Binding PlacementTarget.Tag.CompareWithMasterCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                 <Separator />
-                                <MenuItem Header="Mark / unmark as known-good _baseline"
+                                <MenuItem Header="Mark / unmark as known-good _baseline" help:Help.Topic="main.markbaseline"
                                           Command="{Binding PlacementTarget.Tag.ToggleBaselineCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding}" />
-                                <MenuItem Header="Show this machine's _history"
+                                <MenuItem Header="Show this machine's _history" help:Help.Topic="main.machinehistory"
                                           Command="{Binding PlacementTarget.Tag.ShowMachineHistoryCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding}" />
                                 <MenuItem Header="_Copy summary for ticket"

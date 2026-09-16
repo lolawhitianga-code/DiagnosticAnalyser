@@ -18,6 +18,18 @@
     <SolidColorBrush x:Key="AppBackground" Color="#F4F7F9" />
 
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+
+    <!-- The ? that turns on "ask about this" mode. Dims itself when the mode is off. -->
+    <Style x:Key="HelpButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Content" Value="?" />
+        <Setter Property="Width" Value="26" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Foreground" Value="{StaticResource BrandBlueDark}" />
+        <Setter Property="ToolTip" Value="Press this, then click anything to find out what it does." />
+    </Style>
     <SolidColorBrush x:Key="Surface" Color="#FFFFFF" />
     <SolidColorBrush x:Key="BorderSoft" Color="#D9E1E8" />
 

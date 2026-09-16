@@ -1,6 +1,7 @@
 <Window x:Class="DiagFileMonitor.App.IntegrationSettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:help="clr-namespace:DiagFileMonitor.App.Help"
         Title="Alerts, Zoho and email" Height="640" Width="640"
         MinHeight="480" MinWidth="560"
         Background="{StaticResource AppBackground}"
@@ -19,12 +20,14 @@
     </Window.Resources>
 
     <DockPanel Margin="12">
+        <Button DockPanel.Dock="Top" x:Name="HelpModeButton" Style="{StaticResource HelpButton}"
+                HorizontalAlignment="Right" Margin="0,0,0,4" />
         <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
             <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="{StaticResource BrandNavy}" Margin="0,0,0,8" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Content="Test Zoho" Command="{Binding TestZohoCommand}" Width="100" Margin="0,0,6,0"
+                <Button Content="Test Zoho" help:Help.Topic="settings.zoho" Command="{Binding TestZohoCommand}" Width="100" Margin="0,0,6,0"
                         IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}" />
-                <Button Content="Send test email" Command="{Binding TestEmailCommand}" Width="120" Margin="0,0,6,0"
+                <Button Content="Send test email" help:Help.Topic="settings.email" Command="{Binding TestEmailCommand}" Width="120" Margin="0,0,6,0"
                         IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}" />
                 <Button Content="Save" Command="{Binding SaveCommand}" Width="90" IsDefault="True"
                         Style="{StaticResource PrimaryButton}" />
@@ -35,12 +38,12 @@
             <StackPanel>
                 <GroupBox Header="Diagnostic files">
                     <StackPanel>
-                        <CheckBox Content="Timestamps in support file names are UTC"
+                        <CheckBox Content="Timestamps in support file names are UTC" help:Help.Topic="settings.utc"
                                   IsChecked="{Binding FileNameTimesAreUtc}" Margin="0,0,0,4" />
                         <TextBlock Text="The arrived date is read from the file name, e.g. _7_27_2026 9-53-10 PM. Untick this if the machine writes its own local time instead."
                                    TextWrapping="Wrap" Foreground="{StaticResource BrandGrey}" FontSize="11" Margin="0,0,0,8" />
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Only process files newer than" Style="{StaticResource FieldLabel}" Margin="0,0,8,0" />
+                            <TextBlock Text="Only process files newer than" help:Help.Topic="settings.maxage" Style="{StaticResource FieldLabel}" Margin="0,0,8,0" />
                             <TextBox Text="{Binding MonitorMaxAgeDays}" Width="45" Margin="0,0,8,0" />
                             <TextBlock Text="days (0 processes everything)" Style="{StaticResource FieldLabel}" />
                         </StackPanel>
@@ -49,7 +52,7 @@
 
                 <GroupBox Header="Alerting">
                     <StackPanel>
-                        <CheckBox Content="Alert when a machine sends several files in a short window"
+                        <CheckBox Content="Alert when a machine sends several files in a short window" help:Help.Topic="settings.burst"
                                   IsChecked="{Binding AlertsEnabled}" Margin="0,0,0,8" />
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Alert after" Style="{StaticResource FieldLabel}" />
@@ -65,7 +68,7 @@
 
                 <GroupBox Header="Zoho Desk">
                     <StackPanel>
-                        <CheckBox Content="Post the analysis to a Zoho ticket" IsChecked="{Binding ZohoEnabled}" Margin="0,0,0,8" />
+                        <CheckBox Content="Post the analysis to a Zoho ticket" help:Help.Topic="settings.zoho" IsChecked="{Binding ZohoEnabled}" Margin="0,0,0,8" />
 
                         <TextBlock Text="API base URL (match your data centre)" />
                         <TextBox Text="{Binding ZohoApiBaseUrl}" />
@@ -91,11 +94,11 @@
                         <TextBlock Text="Default contact ID (Zoho usually requires a contact on new tickets)" />
                         <TextBox Text="{Binding ZohoContactId}" />
 
-                        <CheckBox Content="Post as a private note rather than a customer-visible reply"
+                        <CheckBox Content="Post as a private note rather than a customer-visible reply" help:Help.Topic="settings.zohoprivate"
                                   IsChecked="{Binding ZohoPostAsPrivateNote}" Margin="0,4,0,6" />
 
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Reuse a ticket raised for the same machine within" Style="{StaticResource FieldLabel}" />
+                            <TextBlock Text="Reuse a ticket raised for the same machine within" help:Help.Topic="settings.zohoreuse" Style="{StaticResource FieldLabel}" />
                             <TextBox Text="{Binding ZohoReuseTicketWithinHours}" Width="45" Margin="0,0,8,0" />
                             <TextBlock Text="hours" Style="{StaticResource FieldLabel}" />
                         </StackPanel>
@@ -104,7 +107,7 @@
 
                 <GroupBox Header="Alert email (SMTP)">
                     <StackPanel>
-                        <CheckBox Content="Email me when a burst is detected" IsChecked="{Binding EmailEnabled}" Margin="0,0,0,8" />
+                        <CheckBox Content="Email me when a burst is detected" help:Help.Topic="settings.email" IsChecked="{Binding EmailEnabled}" Margin="0,0,0,8" />
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Host" Style="{StaticResource FieldLabel}" />

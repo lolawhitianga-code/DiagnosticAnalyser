@@ -7,6 +7,12 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        // Press ?, then click anything to find out what it does.
+        DiagFileMonitor.App.Help.HelpMode.Attach(this, HelpModeButton, say =>
+        {
+            if (DataContext is ViewModels.MainViewModel viewModel) viewModel.StatusMessage = say;
+        });
         DataContextChanged += OnDataContextChanged;
     }
 

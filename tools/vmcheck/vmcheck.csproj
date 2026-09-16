@@ -31,5 +31,10 @@
     <Compile Include="../../src/DiagFileMonitor.App/ViewModels/*.cs" />
     <Compile Include="../../src/DiagFileMonitor.App/Converters/*.cs" />
     <Compile Include="../../src/DiagFileMonitor.App/Services/*.cs" />
+    <!--
+      The help popup and its mode are written in plain C# rather than XAML precisely so they can
+      be type-checked here. Anything written in XAML ships unverified on this box.
+    -->
+    <Compile Include="../../src/DiagFileMonitor.App/Help/*.cs" />
   </ItemGroup>
 </Project>
