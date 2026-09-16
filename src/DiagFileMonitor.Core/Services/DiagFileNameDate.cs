@@ -1,15 +1,25 @@
 using System.Globalization;
+using System.IO.Compression;
 using System.Text.RegularExpressions;
 
 namespace DiagFileMonitor.Core.Services;
 
 /// <summary>
-/// Reads the timestamp Spida puts at the front of a support file name, e.g.
-/// <c>_7_27_2026 9-53-10 PM . M21461SupportFile.szip</c>.
+/// Works out when a diagnostic bundle was really made.
 /// <para>
-/// The date is month_day_year (confirmed by names like <c>_10_24_2025</c>, where 24 cannot be a
-/// month), and neither the month, day nor hour is zero padded. This is a far better "arrived"
-/// date than the file's creation time, which only records when the file was copied about.
+/// The best source is the timestamp Spida puts at the front of a support file name, e.g.
+/// <c>_7_27_2026 9-53-10 PM . M21461SupportFile.szip</c>. The date is month_day_year (confirmed by
+/// names like <c>_10_24_2025</c>, where 24 cannot be a month), and neither the month, day nor hour
+/// is zero padded.
+/// </para>
+/// <para>
+/// Plenty of bundles arrive without a date in the name at all - <c>AOR1613SupportFiles.szip</c> -
+/// so the next best source is the newest file inside the zip, which is the moment the machine
+/// wrote the export. The file's own creation time on disk is the worst source and is no longer
+/// used: Windows keeps the original creation time when a file of the same name is replaced in the
+/// same folder (file system tunnelling), so saving the same attachment repeatedly leaves every
+/// copy stamped with the date of the first one. That is not a cosmetic problem - a bundle stamped
+/// months old is dropped by the "only files newer than" filter without ever being read.
 /// </para>
 /// </summary>
 public static class DiagFileNameDate
@@ -65,18 +75,63 @@ public static class DiagFileNameDate
         }
     }
 
-    /// <summary>The name's timestamp where there is one, otherwise when the file landed on disk.</summary>
+    /// <summary>
+    /// When the bundle was made: the name's timestamp, then the newest file inside the zip, then
+    /// the file's last write time, then now.
+    /// </summary>
     public static DateTime ArrivedUtc(string path, bool fileNameTimesAreUtc)
     {
         if (TryParseUtc(path, fileNameTimesAreUtc) is { } fromName) return fromName;
+        if (NewestEntryUtc(path, fileNameTimesAreUtc) is { } fromZip) return fromZip;
 
         try
         {
-            return new FileInfo(path).CreationTimeUtc;
+            // Last write, never creation time - see the note on this class.
+            return new FileInfo(path).LastWriteTimeUtc;
         }
         catch (IOException)
         {
             return DateTime.UtcNow;
+        }
+    }
+
+    /// <summary>
+    /// The newest timestamp among the files inside the bundle, which is when the machine wrote the
+    /// export. A bundle carries plenty of old files - machine configuration from years back - so it
+    /// is the newest that dates the export, not the oldest.
+    /// </summary>
+    public static DateTime? NewestEntryUtc(string path, bool timesAreUtc)
+    {
+        try
+        {
+            using var archive = ZipFile.OpenRead(path);
+
+            DateTime? newest = null;
+            var ceiling = DateTime.UtcNow.AddDays(1);
+
+            foreach (var entry in archive.Entries)
+            {
+                var written = entry.LastWriteTime.DateTime;
+
+                // A zip stores no time zone, so the stamp is the machine's own clock - the same
+                // assumption the file name gets.
+                var utc = timesAreUtc
+                    ? DateTime.SpecifyKind(written, DateTimeKind.Utc)
+                    : DateTime.SpecifyKind(written, DateTimeKind.Local).ToUniversalTime();
+
+                // 1980-01-01 is the zero value of a DOS timestamp, and anything in the future is a
+                // machine with its clock wrong. Neither dates the export.
+                if (utc.Year <= 1980 || utc > ceiling) continue;
+
+                if (newest is null || utc > newest) newest = utc;
+            }
+
+            return newest;
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            // Not readable as a zip, or gone. The caller has another fallback.
+            return null;
         }
     }
 }

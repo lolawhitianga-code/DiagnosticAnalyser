@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using DiagFileMonitor.Core.Services;
 
 namespace DiagFileMonitor.Core.Tests;
@@ -121,5 +122,122 @@ public class DiagFileNameDateTests
         {
             Directory.Delete(dir, recursive: true);
         }
+    }
+}
+
+/// <summary>
+/// Dating a bundle whose name carries no timestamp. Raised from the field: a brand new
+/// AOR1613SupportFiles.szip showed an arrival date of 2025-11-03, which put it outside the
+/// "only files newer than" window and would have had it dropped without being read.
+/// </summary>
+public class BundleArrivalDateTests : IDisposable
+{
+    private readonly string _folder = Path.Combine(Path.GetTempPath(), "arrivaltests", Guid.NewGuid().ToString("N"));
+
+    public BundleArrivalDateTests() => Directory.CreateDirectory(_folder);
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_folder, recursive: true); } catch { /* best effort */ }
+    }
+
+    private string MakeZip(string name, params (string Entry, DateTime Written)[] entries)
+    {
+        var path = Path.Combine(_folder, name);
+
+        using (var archive = ZipFile.Open(path, ZipArchiveMode.Create))
+        {
+            foreach (var (entryName, written) in entries)
+            {
+                var entry = archive.CreateEntry(entryName);
+                entry.LastWriteTime = new DateTimeOffset(written, TimeSpan.Zero);
+                using var stream = entry.Open();
+                stream.WriteByte(1);
+            }
+        }
+
+        return path;
+    }
+
+    [Fact]
+    public void TakesTheNewestFileInsideTheBundleWhenTheNameHasNoDate()
+    {
+        // A bundle carries machine configuration from years back alongside logs written seconds
+        // ago. It is the newest that says when the export was taken.
+        var path = MakeZip("AOR1613SupportFiles.szip",
+            ("FastFramer.xml", new DateTime(2017, 11, 3, 7, 37, 0)),
+            ("Logs/Change.log", new DateTime(2024, 9, 5, 6, 56, 0)),
+            ("Logs/MachineLog.txt", new DateTime(2026, 9, 16, 13, 9, 44)));
+
+        Assert.Equal(new DateTime(2026, 9, 16, 13, 9, 44), DiagFileNameDate.ArrivedUtc(path, true));
+    }
+
+    [Fact]
+    public void ANameWithADateStillWinsOverTheZipContents()
+    {
+        var path = MakeZip("_7_27_2026 10-15-10 PM . M20716SupportFile.szip",
+            ("Logs/MachineLog.txt", new DateTime(2026, 7, 28, 10, 15, 10)));
+
+        Assert.Equal(new DateTime(2026, 7, 27, 22, 15, 10), DiagFileNameDate.ArrivedUtc(path, true));
+    }
+
+    [Fact]
+    public void TheCreationTimeOnDiskIsNeverUsed()
+    {
+        // Windows restores the original creation time when a file of the same name is replaced in
+        // the same folder, so saving the same attachment twice leaves the second one stamped with
+        // the date of the first. That is where 2025-11-03 came from.
+        var path = MakeZip("AOR1613SupportFiles.szip",
+            ("Logs/MachineLog.txt", new DateTime(2026, 9, 16, 13, 9, 44)));
+
+        File.SetCreationTimeUtc(path, new DateTime(2025, 11, 3, 9, 0, 0));
+
+        Assert.Equal(new DateTime(2026, 9, 16, 13, 9, 44), DiagFileNameDate.ArrivedUtc(path, true));
+    }
+
+    [Fact]
+    public void FallsBackToTheLastWriteTimeWhenTheZipCannotBeRead()
+    {
+        var path = Path.Combine(_folder, "NotReallyAZip.szip");
+        File.WriteAllText(path, "this is not a zip");
+        File.SetLastWriteTimeUtc(path, new DateTime(2026, 9, 16, 1, 28, 35));
+
+        Assert.Null(DiagFileNameDate.NewestEntryUtc(path, true));
+        Assert.Equal(new DateTime(2026, 9, 16, 1, 28, 35), DiagFileNameDate.ArrivedUtc(path, true));
+    }
+
+    [Fact]
+    public void ADosZeroTimestampIsNotTreatedAsADate()
+    {
+        // 1980-01-01 is the zero value of a DOS timestamp - it dates nothing.
+        var path = MakeZip("AOR1613SupportFiles.szip",
+            ("empty.txt", new DateTime(1980, 1, 1, 0, 0, 0)));
+
+        Assert.Null(DiagFileNameDate.NewestEntryUtc(path, true));
+    }
+
+    [Fact]
+    public void AnEntryFromTheFutureIsIgnored()
+    {
+        // A machine with its clock wrong must not stamp a bundle years ahead, or it outranks
+        // every real bundle in the list forever.
+        var path = MakeZip("AOR1613SupportFiles.szip",
+            ("Logs/MachineLog.txt", new DateTime(2026, 9, 16, 13, 9, 44)),
+            ("Logs/ErrLog.txt", DateTime.UtcNow.AddYears(5)));
+
+        Assert.Equal(new DateTime(2026, 9, 16, 13, 9, 44), DiagFileNameDate.NewestEntryUtc(path, true));
+    }
+
+    [Fact]
+    public void ABundleDatedFromInsideIsNotDroppedAsTooOld()
+    {
+        // The real consequence: with a 100 day window, a wrongly-aged bundle is skipped by the
+        // folder monitor and never read at all.
+        var path = MakeZip("AOR1613SupportFiles.szip",
+            ("Logs/MachineLog.txt", DateTime.UtcNow.AddHours(-2)));
+
+        File.SetCreationTimeUtc(path, DateTime.UtcNow.AddDays(-300));
+
+        Assert.True(DiagFileNameDate.ArrivedUtc(path, true) > DateTime.UtcNow.AddDays(-100));
     }
 }
