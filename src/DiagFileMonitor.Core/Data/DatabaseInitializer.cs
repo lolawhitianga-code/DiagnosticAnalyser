@@ -23,7 +23,11 @@ public static class DatabaseInitializer
         ("DiagnosticFiles", "SoftwareName", "TEXT NULL"),
         ("DiagnosticFiles", "SupportPanel", "TEXT NULL"),
         ("DiagnosticFiles", "SupportMembers", "TEXT NULL"),
-        ("DiagnosticFiles", "SupportIssue", "TEXT NULL")
+        ("DiagnosticFiles", "SupportIssue", "TEXT NULL"),
+        ("ProductionLogFiles", "Source", "TEXT NOT NULL DEFAULT 'WeeklyLog'"),
+        ("ProductionLogFiles", "CoversFromUtc", "TEXT NULL"),
+        ("ProductionLogFiles", "CoversToUtc", "TEXT NULL"),
+        ("ProductionLogFiles", "PanelsSkippedAsDuplicate", "INTEGER NOT NULL DEFAULT 0")
     };
 
     /// <summary>
@@ -44,9 +48,16 @@ public static class DatabaseInitializer
                 "ConsecutiveDuplicates" INTEGER NOT NULL,
                 "MalformedLines" INTEGER NOT NULL,
                 "PanelsStored" INTEGER NOT NULL,
-                "Notes" TEXT NULL);
-            CREATE UNIQUE INDEX IF NOT EXISTS "IX_ProductionLogFiles_SerialNumber_Year_Week"
-                ON "ProductionLogFiles" ("SerialNumber", "Year", "Week");
+                "Notes" TEXT NULL,
+                "Source" TEXT NOT NULL DEFAULT 'WeeklyLog',
+                "CoversFromUtc" TEXT NULL,
+                "CoversToUtc" TEXT NULL,
+                "PanelsSkippedAsDuplicate" INTEGER NOT NULL DEFAULT 0);
+            -- The earlier build keyed a week on serial alone, which would block a support
+            -- bundle's partial week once the full weekly export was already held.
+            DROP INDEX IF EXISTS "IX_ProductionLogFiles_SerialNumber_Year_Week";
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_ProductionLogFiles_SerialNumber_Year_Week_Source"
+                ON "ProductionLogFiles" ("SerialNumber", "Year", "Week", "Source");
             """),
         ("ProductionPanels", """
             CREATE TABLE IF NOT EXISTS "ProductionPanels" (

@@ -1,6 +1,7 @@
 using DiagFileMonitor.Core.Data;
 using DiagFileMonitor.Core.Models;
 using DiagFileMonitor.Core.Production;
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 
 namespace DiagFileMonitor.Core.Services;
@@ -98,72 +99,31 @@ public class ProductionImportService
         {
             token.ThrowIfCancellationRequested();
 
-            await using var context = _contextFactory();
-
-            var held = await context.ProductionLogFiles
-                .FirstOrDefaultAsync(f => f.SerialNumber == serialNumber && f.Year == year && f.Week == weekNumber,
-                    token);
-
-            if (held is not null)
-            {
-                if (!replaceExisting)
-                {
-                    skippedHeld++;
-                    continue;
-                }
-
-                context.ProductionLogFiles.Remove(held);
-                await context.SaveChangesAsync(token);
-            }
-
             var parsed = ProdLogParser.ParseFile(path);
             var classified = new PanelClassifier(_options).Classify(parsed.Events);
 
-            var fileNotes = new List<string>();
-            if (parsed.HadNullPadding) fileNotes.Add("contained NUL padding, stripped before parsing");
-            if (parsed.MalformedLines > 0) fileNotes.Add($"{parsed.MalformedLines} unreadable line(s) skipped");
-            if (parsed.UnknownEventNames.Count > 0)
-                fileNotes.Add("unrecognised event(s): "
-                              + string.Join(", ", parsed.UnknownEventNames.Select(u => $"{u.Key} x{u.Value}")));
-            if (classified.UnexpectedFieldCounts > 0)
-                fileNotes.Add($"{classified.UnexpectedFieldCounts} PanelAssembled row(s) had too few fields");
-
-            var record = new ProductionLogFile
+            var stored = await StoreAsync(new StoreRequest
             {
                 SerialNumber = serialNumber,
                 FileName = Path.GetFileName(path),
                 Year = year,
                 Week = weekNumber,
-                ImportedAtUtc = DateTime.UtcNow,
-                LinesRead = parsed.LinesRead,
-                ConsecutiveDuplicates = parsed.ConsecutiveDuplicates,
-                MalformedLines = parsed.MalformedLines,
-                PanelsStored = classified.Panels.Count,
-                Notes = fileNotes.Count > 0 ? string.Join("; ", fileNotes) : null,
-                Panels = classified.Panels.Select(p => new ProductionPanel
-                {
-                    SerialNumber = serialNumber,
-                    Name = p.Name,
-                    EndedAt = p.EndedAt,
-                    StartedAt = p.StartedAt,
-                    Outcome = p.Outcome.ToString(),
-                    FastenerCount = p.FastenerCount,
-                    MembersAssembled = p.MembersAssembled,
-                    Cube = p.Cube,
-                    Lineal = p.Lineal,
-                    BuildMinutes = p.BuildMinutes,
-                    IdleMinutes = p.IdleMinutes,
-                    Junctions = p.Junctions,
-                    BuildTimeImplausible = p.BuildTimeImplausible
-                }).ToList()
-            };
+                Source = ProductionSources.WeeklyLog,
+                Parsed = parsed,
+                Panels = classified.Panels,
+                ClassifierNotes = classified.UnexpectedFieldCounts,
+                ReplaceExisting = replaceExisting
+            }, token);
 
-            context.ProductionLogFiles.Add(record);
-            await context.SaveChangesAsync(token);
+            if (stored.FilesSkippedAlreadyStored > 0)
+            {
+                skippedHeld++;
+                continue;
+            }
 
             read++;
-            panelsStored += record.PanelsStored;
-            foreach (var note in fileNotes) notes.Add($"{record.FileName}: {note}");
+            panelsStored += stored.PanelsStored;
+            notes.AddRange(stored.Notes);
         }
 
         if (skippedNotProd > 0)
@@ -236,6 +196,178 @@ public class ProductionImportService
             Notes = notes
         };
     }
+
+    /// <summary>
+    /// Reads the production report a diagnostic bundle carries as <c>Reports/LatestReport.txt</c>.
+    /// <para>
+    /// This is where the two halves meet. The weekly ProdLogV2 exports hold plenty of production
+    /// data and no machine identity; a support bundle holds a few days of the same data and a
+    /// Machine.xml that says exactly which machine it came from. So a bundle's report is filed
+    /// under the serial the bundle already reported about itself.
+    /// </para>
+    /// <para>
+    /// A bundle covers part of a week, and the same days may also arrive later in a full weekly
+    /// export. Both are kept and the overlapping panels are de-duplicated, so neither source has
+    /// to be preferred over the other.
+    /// </para>
+    /// </summary>
+    public async Task<ProductionImportResult> ImportBundleReportAsync(
+        string reportPath, string serialNumber, string bundleName = "", CancellationToken token = default)
+    {
+        if (string.IsNullOrWhiteSpace(serialNumber))
+            return new ProductionImportResult { Notes = new[] { "No serial number, so there is nothing to file it under." } };
+
+        if (!File.Exists(reportPath) || new FileInfo(reportPath).Length == 0)
+            return new ProductionImportResult();
+
+        if (!ProdLogParser.LooksLikeProductionContent(reportPath))
+            return new ProductionImportResult();
+
+        var parsed = ProdLogParser.ParseFile(reportPath);
+        if (parsed.Events.Count == 0 || parsed.LastEvent is null) return new ProductionImportResult();
+
+        // The report has no week in its name, so the events date it. The last one is the moment
+        // the export was taken.
+        var last = parsed.LastEvent.Value;
+        var year = ISOWeek.GetYear(last);
+        var week = ISOWeek.GetWeekOfYear(last);
+
+        var classified = new PanelClassifier(_options).Classify(parsed.Events);
+
+        return await StoreAsync(new StoreRequest
+        {
+            SerialNumber = serialNumber,
+            FileName = string.IsNullOrWhiteSpace(bundleName)
+                ? Path.GetFileName(reportPath)
+                : $"{bundleName} ({Path.GetFileName(reportPath)})",
+            Year = year,
+            Week = week,
+            Source = ProductionSources.SupportBundle,
+            Parsed = parsed,
+            Panels = classified.Panels,
+            ClassifierNotes = classified.UnexpectedFieldCounts,
+            ReplaceExisting = true
+        }, token);
+    }
+
+    private class StoreRequest
+    {
+        public string SerialNumber = string.Empty;
+        public string FileName = string.Empty;
+        public int Year;
+        public int Week;
+        public string Source = ProductionSources.WeeklyLog;
+        public ProdLogParseResult Parsed = new();
+        public IReadOnlyList<PanelRecord> Panels = Array.Empty<PanelRecord>();
+        public int ClassifierNotes;
+        public bool ReplaceExisting;
+    }
+
+    /// <summary>
+    /// Writes one file's panels, leaving out any already held for the same machine at the same
+    /// moment. Two sources overlapping is normal, and a panel counted twice would inflate every
+    /// figure built on it.
+    /// </summary>
+    private async Task<ProductionImportResult> StoreAsync(StoreRequest request, CancellationToken token)
+    {
+        await using var context = _contextFactory();
+
+        var held = await context.ProductionLogFiles.FirstOrDefaultAsync(
+            f => f.SerialNumber == request.SerialNumber && f.Year == request.Year
+                 && f.Week == request.Week && f.Source == request.Source, token);
+
+        if (held is not null)
+        {
+            if (!request.ReplaceExisting)
+            {
+                return new ProductionImportResult { FilesSkippedAlreadyStored = 1 };
+            }
+
+            context.ProductionLogFiles.Remove(held);
+            await context.SaveChangesAsync(token);
+        }
+
+        var from = request.Panels.Count > 0 ? request.Panels.Min(p => p.EndedAt) : (DateTime?)null;
+        var to = request.Panels.Count > 0 ? request.Panels.Max(p => p.EndedAt) : (DateTime?)null;
+
+        // Only the window this file covers has to be checked, which keeps the lookup small.
+        var alreadyHeld = from is null
+            ? new HashSet<string>()
+            : (await context.ProductionPanels.AsNoTracking()
+                    .Where(p => p.SerialNumber == request.SerialNumber
+                                && p.EndedAt >= from && p.EndedAt <= to)
+                    .Select(p => new { p.EndedAt, p.Name, p.Outcome })
+                    .ToListAsync(token))
+                .Select(p => PanelKey(p.EndedAt, p.Name, p.Outcome))
+                .ToHashSet();
+
+        var fresh = request.Panels
+            .Where(p => !alreadyHeld.Contains(PanelKey(p.EndedAt, p.Name, p.Outcome.ToString())))
+            .ToList();
+
+        var fileNotes = new List<string>();
+        if (request.Parsed.HadNullPadding) fileNotes.Add("contained NUL padding, stripped before parsing");
+        if (request.Parsed.MalformedLines > 0) fileNotes.Add($"{request.Parsed.MalformedLines} unreadable line(s) skipped");
+        if (request.Parsed.UnknownEventNames.Count > 0)
+            fileNotes.Add("unrecognised event(s): "
+                          + string.Join(", ", request.Parsed.UnknownEventNames.Select(u => $"{u.Key} x{u.Value}")));
+        if (request.ClassifierNotes > 0)
+            fileNotes.Add($"{request.ClassifierNotes} PanelAssembled row(s) had too few fields");
+        if (fresh.Count < request.Panels.Count)
+            fileNotes.Add($"{request.Panels.Count - fresh.Count} panel(s) were already held from another source");
+
+        var record = new ProductionLogFile
+        {
+            SerialNumber = request.SerialNumber,
+            FileName = request.FileName,
+            Year = request.Year,
+            Week = request.Week,
+            Source = request.Source,
+            ImportedAtUtc = DateTime.UtcNow,
+            LinesRead = request.Parsed.LinesRead,
+            ConsecutiveDuplicates = request.Parsed.ConsecutiveDuplicates,
+            MalformedLines = request.Parsed.MalformedLines,
+            PanelsStored = fresh.Count,
+            PanelsSkippedAsDuplicate = request.Panels.Count - fresh.Count,
+            CoversFromUtc = from,
+            CoversToUtc = to,
+            Notes = fileNotes.Count > 0 ? string.Join("; ", fileNotes) : null,
+            Panels = fresh.Select(p => ToRow(p, request.SerialNumber)).ToList()
+        };
+
+        context.ProductionLogFiles.Add(record);
+        await context.SaveChangesAsync(token);
+
+        return new ProductionImportResult
+        {
+            FilesRead = 1,
+            PanelsStored = fresh.Count,
+            Serials = new[] { request.SerialNumber },
+            Notes = fileNotes.Select(n => $"{record.FileName}: {n}").ToList()
+        };
+    }
+
+    /// <summary>A panel is the same panel when the same machine closed the same name at the same
+    /// instant. Two sources covering one day produce identical rows.</summary>
+    private static string PanelKey(DateTime endedAt, string name, string outcome) =>
+        $"{endedAt:O}|{name}|{outcome}";
+
+    private static ProductionPanel ToRow(PanelRecord p, string serial) => new()
+    {
+        SerialNumber = serial,
+        Name = p.Name,
+        EndedAt = p.EndedAt,
+        StartedAt = p.StartedAt,
+        Outcome = p.Outcome.ToString(),
+        FastenerCount = p.FastenerCount,
+        MembersAssembled = p.MembersAssembled,
+        Cube = p.Cube,
+        Lineal = p.Lineal,
+        BuildMinutes = p.BuildMinutes,
+        IdleMinutes = p.IdleMinutes,
+        Junctions = p.Junctions,
+        BuildTimeImplausible = p.BuildTimeImplausible
+    };
 
     /// <summary>Panels back out of the database, as the analyser wants them.</summary>
     public async Task<IReadOnlyList<PanelRecord>> LoadPanelsAsync(

@@ -104,6 +104,37 @@ manifest ships alongside these exports that would settle identity properly.*
 
 **7. `MemberCut` is rare and unused.** 13 events in ten weeks. Parsed and kept, never counted.
 
+**8. `UserLogout` was not in the reference guide's event list.** It turns up in a real bundle's
+production report. Recognised now, but unused - like `UserLogin`.
+
+## Two sources, and why both
+
+Production data arrives two ways, and they complement each other exactly:
+
+| | Weekly export | Inside a support bundle |
+|---|---|---|
+| File | `ProdLogV2<year>W<week>.log` | `Reports/LatestReport.txt` |
+| Covers | a full ISO week | the few days before the bundle was taken |
+| Says which machine? | **no** - nothing in the file, name or content | **yes** - the bundle's own `Machine.xml` |
+| How it gets imported | Browse to a folder | automatically, whenever a `.szip` is processed |
+
+That second row is the point. The weekly exports carry plenty of production data and no identity;
+a bundle carries a few days of the same data and a serial number. So a bundle's report is filed
+under the serial the machine reported about itself, with nobody typing anything.
+
+Measured on real bundles: an M20716 export held 2 days and 108 panels; an AOR1694 export held
+4 days, 17,021 events and 572 assembled panels. One real bundle (AOR1613) carries a **zero byte**
+`LatestReport.txt`, which is skipped without complaint.
+
+The two sources overlap on purpose - the weekly export for a week arrives later holding days a
+bundle already covered. Both files are recorded, and **panels are de-duplicated**, matched on
+machine, moment and panel name. Neither source has to be preferred over the other, and counting a
+day twice would inflate every figure built on it.
+
+A bundle's report has no week in its name, so its ISO week comes from its own events. Anything
+going wrong while reading it is logged and swallowed: production figures are a bonus on top of a
+diagnostic import, never a reason to fail the import the user asked for.
+
 ## How it fits together
 
 ```

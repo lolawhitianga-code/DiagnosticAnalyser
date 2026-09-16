@@ -1,3 +1,4 @@
+using DiagFileMonitor.Core.Models;
 using DiagFileMonitor.Core.Services;
 using DiagFileMonitor.Core.Production;
 using DiagFileMonitor.Core.Reports;
@@ -532,5 +533,164 @@ public class MachineFolderSweepTests : IDisposable
 
         var stored = await import.StoredMachinesAsync();
         Assert.Equal(2, stored.Count);
+    }
+}
+
+/// <summary>
+/// A support bundle carries its own production data as Reports/LatestReport.txt - same format as
+/// the weekly exports, nothing in the name to say so, and covering the few days before the bundle
+/// was taken. Unlike a weekly export it also carries a Machine.xml, so it is the one source that
+/// says which machine the production belongs to without anybody typing it in.
+/// </summary>
+public class BundleProductionTests
+{
+    private const string ProductionLines = """
+        PanelStarted, 20260727 10:43:11, E-1D
+        MachineStarted, 20260727 10:43:11
+        MemberAssembled, 20260727 10:45:18, 1, 0, Q, 0.01, 2.381
+        MemberAssembled, 20260727 10:45:18, 1, 0, Q, 0.01, 2.381
+        PanelAssembled, 20260727 10:46:00, 8, E-1D, 0.139, 3, 2.8, 1, 20
+        PanelStarted, 20260727 10:47:19, E-2D
+        MemberAssembled, 20260727 10:48:18, 1, 0, D, 0.012, 3.078
+        PanelAssembled, 20260727 10:49:30, 12, E-2D, 0.105, 2.15, 2.2, 0.5, 16
+        UserLogout, 20260728 00:19:30, Spida
+        """;
+
+    private static Dictionary<string, string> Bundle(string serial, string? report) 
+    {
+        var files = new Dictionary<string, string>
+        {
+            ["Machine.xml"] = $"""
+                <?xml version="1.0" encoding="utf-8"?>
+                <Machine><Title>Spida SDN, V2.4.0.0, {serial}, Carters, RakingWallExtruderV3DG</Title></Machine>
+                """,
+            ["Logs/MachineLog.txt"] = "07:53:30.1747290,  OutputChange, LowerGunFire,  Output (COM7-6.5) Set On\n"
+        };
+
+        if (report is not null) files["Reports/LatestReport.txt"] = report;
+        return files;
+    }
+
+    [Fact]
+    public void ProductionContentIsRecognisedByWhatIsInItNotWhatItIsCalled()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(path, ProductionLines);
+            Assert.True(ProdLogParser.LooksLikeProductionContent(path));
+
+            File.WriteAllText(path, "07:53:30.1747290,  OutputChange, LowerGunFire,  Output (COM7-6.5) Set On\n");
+            Assert.False(ProdLogParser.LooksLikeProductionContent(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void UserLogoutIsARealEventNotAnUnknownOne()
+    {
+        // Not in the reference guide's list, but it turns up in a real bundle's production report.
+        var result = ProdLogParser.Parse("UserLogout, 20260728 00:19:30, Spida");
+
+        Assert.Equal(ProdLogEventKind.UserLogout, Assert.Single(result.Events).Kind);
+        Assert.Empty(result.UnknownEventNames);
+    }
+
+    [Fact]
+    public async Task ProcessingABundleFilesItsProductionUnderTheMachineTheBundleReported()
+    {
+        using var env = new TestEnvironment();
+
+        var file = await env.Processor.ProcessAsync(
+            env.CreateZip("M20716SupportFile.szip", Bundle("M20716", ProductionLines)));
+
+        Assert.Equal("M20716", file.SerialNumber);
+
+        var stored = Assert.Single(await env.Production.StoredMachinesAsync());
+        Assert.Equal("M20716", stored.SerialNumber);
+        Assert.Equal(2, stored.Panels);
+
+        var panels = await env.Production.LoadPanelsAsync("M20716");
+        Assert.All(panels, p => Assert.Equal(PanelOutcome.Completed, p.Outcome));
+        Assert.Equal(0.244, panels.Sum(p => p.Cube), 3);
+    }
+
+    [Fact]
+    public async Task TheWeekComesFromTheEventsBecauseTheNameCarriesNone()
+    {
+        using var env = new TestEnvironment();
+        await env.Processor.ProcessAsync(env.CreateZip("M20716SupportFile.szip", Bundle("M20716", ProductionLines)));
+
+        await using var context = env.CreateContext();
+        var record = context.ProductionLogFiles.Single();
+
+        // 28 July 2026 is ISO week 31.
+        Assert.Equal(2026, record.Year);
+        Assert.Equal(31, record.Week);
+        Assert.Equal(ProductionSources.SupportBundle, record.Source);
+        Assert.Equal(new DateTime(2026, 7, 27, 10, 46, 0), record.CoversFromUtc);
+    }
+
+    [Fact]
+    public async Task AnEmptyReportIsSkippedWithoutComplaint()
+    {
+        // The real AOR1613 bundle carries a zero byte LatestReport.txt.
+        using var env = new TestEnvironment();
+
+        var file = await env.Processor.ProcessAsync(
+            env.CreateZip("AOR1613SupportFiles.szip", Bundle("AOR1613", string.Empty)));
+
+        Assert.Equal(ProcessingStatus.Processed, file.Status);
+        Assert.Empty(await env.Production.StoredMachinesAsync());
+    }
+
+    [Fact]
+    public async Task ABundleWithNoProductionReportIsStillProcessed()
+    {
+        using var env = new TestEnvironment();
+
+        var file = await env.Processor.ProcessAsync(
+            env.CreateZip("M20716SupportFile.szip", Bundle("M20716", report: null)));
+
+        Assert.Equal(ProcessingStatus.Processed, file.Status);
+        Assert.Empty(await env.Production.StoredMachinesAsync());
+    }
+
+    [Fact]
+    public async Task TheSameBundleTwiceDoesNotDoubleTheProduction()
+    {
+        using var env = new TestEnvironment();
+
+        await env.Processor.ProcessAsync(env.CreateZip("a.szip", Bundle("M20716", ProductionLines)));
+        await env.Processor.ProcessAsync(env.CreateZip("b.szip", Bundle("M20716", ProductionLines)));
+
+        Assert.Equal(2, Assert.Single(await env.Production.StoredMachinesAsync()).Panels);
+    }
+
+    [Fact]
+    public async Task AWeeklyExportOverlappingABundleCountsEachPanelOnce()
+    {
+        // The two sources overlap by design: a bundle holds the days before it was taken, and the
+        // weekly export for that week arrives later holding the same days. Counting both would
+        // inflate every figure built on them.
+        using var env = new TestEnvironment();
+
+        await env.Processor.ProcessAsync(env.CreateZip("a.szip", Bundle("M20716", ProductionLines)));
+
+        var weekly = Path.Combine(env.RootPath, "ProdLogV22026W31.log");
+        File.WriteAllText(weekly, ProductionLines);
+
+        var result = await env.Production.ImportFilesAsync(new[] { weekly }, "M20716");
+
+        Assert.Equal(1, result.FilesRead);
+        Assert.Equal(0, result.PanelsStored);
+        Assert.Contains(result.Notes, n => n.Contains("already held from another source"));
+
+        // Both files are recorded, but the panels are counted once.
+        Assert.Equal(2, Assert.Single(await env.Production.StoredMachinesAsync()).Weeks);
+        Assert.Equal(2, (await env.Production.LoadPanelsAsync("M20716")).Count);
     }
 }

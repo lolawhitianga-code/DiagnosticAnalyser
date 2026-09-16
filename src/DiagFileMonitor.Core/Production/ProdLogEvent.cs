@@ -13,6 +13,10 @@ public enum ProdLogEventKind
     MachineIdleStop,
     UserLogin,
 
+    /// <summary>Not in the reference guide's event list, but real - seen in a support bundle's
+    /// own production report.</summary>
+    UserLogout,
+
     /// <summary>An event name we do not recognise. Counted and reported, never fatal.</summary>
     Unknown
 }

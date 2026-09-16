@@ -22,11 +22,15 @@ public class DiagFileProcessor
         ["supportinfo.txt"] = LogFileKind.SupportInfo
     };
 
-    public DiagFileProcessor(string extractRootPath, DiagFileRepository repository, bool fileNameTimesAreUtc = true)
+    private readonly ProductionImportService? _production;
+
+    public DiagFileProcessor(string extractRootPath, DiagFileRepository repository,
+        bool fileNameTimesAreUtc = true, ProductionImportService? production = null)
     {
         _extractRootPath = extractRootPath;
         _repository = repository;
         _fileNameTimesAreUtc = fileNameTimesAreUtc;
+        _production = production;
         Directory.CreateDirectory(_extractRootPath);
     }
 
@@ -132,6 +136,12 @@ public class DiagFileProcessor
         }
 
         await _repository.AddAsync(diagFile);
+
+        // A bundle carries its own production report, and unlike the weekly exports it also says
+        // which machine it came from. That pairing is the only thing that files production data
+        // against a serial without somebody typing one in.
+        await ImportProductionReportAsync(diagFile, token);
+
         return diagFile;
     }
 
@@ -144,6 +154,38 @@ public class DiagFileProcessor
     /// the behaviour the same wherever it runs - including the Linux test box.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Stores the production data inside a bundle against the machine the bundle reported itself
+    /// to be. Anything going wrong here is noted and swallowed: production figures are a bonus,
+    /// and never a reason to fail the diagnostic import the user actually asked for.
+    /// </summary>
+    private async Task ImportProductionReportAsync(DiagnosticFile diagFile, CancellationToken token)
+    {
+        if (_production is null) return;
+        if (diagFile.Status != ProcessingStatus.Processed) return;
+        if (string.IsNullOrWhiteSpace(diagFile.SerialNumber)) return;
+        if (diagFile.ExtractedPath is null) return;
+
+        try
+        {
+            var report = FindByName(diagFile.ExtractedPath, "latestreport.txt");
+            if (report is null) return;
+
+            var result = await _production.ImportBundleReportAsync(
+                report, diagFile.SerialNumber.Trim(), diagFile.OriginalFileName, token);
+
+            if (result.PanelsStored > 0)
+            {
+                SimpleLogger.Info($"Stored {result.PanelsStored} production panel(s) from "
+                                  + $"'{diagFile.OriginalFileName}' against {diagFile.SerialNumber}.");
+            }
+        }
+        catch (Exception ex)
+        {
+            SimpleLogger.Error($"Could not read the production report in '{diagFile.OriginalFileName}'", ex);
+        }
+    }
+
     private static string? FindByName(string root, string fileName) =>
         Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
             .FirstOrDefault(p => Path.GetFileName(p).Equals(fileName, StringComparison.OrdinalIgnoreCase));

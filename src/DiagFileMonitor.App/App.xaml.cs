@@ -45,7 +45,11 @@ public partial class App : System.Windows.Application
         }
 
         var repository = new DiagFileRepository(() => new DiagDbContext(BuildOptions()));
-        var processor = new DiagFileProcessor(settings.ExtractRootPath, repository, settings.FileNameTimesAreUtc);
+        // Every bundle carries a few days of production data and the serial to file it under, so
+        // the processor stores that alongside the diagnostic import.
+        var production = new ProductionImportService(repository.ContextFactory);
+        var processor = new DiagFileProcessor(
+            settings.ExtractRootPath, repository, settings.FileNameTimesAreUtc, production);
         _monitorService = new FolderMonitorService(processor);
         _notifier = new TrayNotifier();
 

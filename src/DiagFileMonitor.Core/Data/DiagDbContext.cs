@@ -36,7 +36,9 @@ public class DiagDbContext : DbContext
         prodFile.HasKey(p => p.Id);
         // A serial plus an ISO week is one week of production, however many copies of the file
         // an export happens to carry.
-        prodFile.HasIndex(p => new { p.SerialNumber, p.Year, p.Week }).IsUnique();
+        // A week can arrive twice from different places: the weekly export and the partial report
+        // inside a support bundle. Both are kept; it is the panels that get de-duplicated.
+        prodFile.HasIndex(p => new { p.SerialNumber, p.Year, p.Week, p.Source }).IsUnique();
         prodFile.HasMany(p => p.Panels)
             .WithOne(p => p.LogFile)
             .HasForeignKey(p => p.ProductionLogFileId)

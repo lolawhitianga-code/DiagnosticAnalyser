@@ -30,7 +30,8 @@ public static class ProdLogParser
         ["MachineStopped"] = ProdLogEventKind.MachineStopped,
         ["MachineIdleStart"] = ProdLogEventKind.MachineIdleStart,
         ["MachineIdleStop"] = ProdLogEventKind.MachineIdleStop,
-        ["UserLogin"] = ProdLogEventKind.UserLogin
+        ["UserLogin"] = ProdLogEventKind.UserLogin,
+        ["UserLogout"] = ProdLogEventKind.UserLogout
     };
 
     public static ProdLogParseResult ParseFile(string path)
@@ -126,4 +127,46 @@ public static class ProdLogParser
     }
 
     public static bool LooksLikeProdLog(string fileName) => WeekFromFileName(fileName) is not null;
+
+    /// <summary>
+    /// Whether a file holds production events, judged on what is in it rather than what it is
+    /// called.
+    /// <para>
+    /// Needed because a support bundle carries its own production data as
+    /// <c>Reports\LatestReport.txt</c> - same format, nothing in the name to say so. Only the
+    /// first few lines are read, so this is cheap enough to run over a folder.
+    /// </para>
+    /// </summary>
+    public static bool LooksLikeProductionContent(string path)
+    {
+        try
+        {
+            using var reader = new StreamReader(path);
+
+            for (var read = 0; read < 20; read++)
+            {
+                var line = reader.ReadLine();
+                if (line is null) break;
+
+                line = line.Replace("\0", string.Empty).Trim();
+                if (line.Length == 0) continue;
+
+                var fields = line.Split(',');
+                if (fields.Length < 2) continue;
+
+                if (Names.ContainsKey(fields[0].Trim())
+                    && DateTime.TryParseExact(fields[1].Trim(), "yyyyMMdd HH:mm:ss",
+                        CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
 }
