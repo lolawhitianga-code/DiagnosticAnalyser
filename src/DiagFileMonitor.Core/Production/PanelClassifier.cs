@@ -8,6 +8,12 @@ public class PanelClassifierOptions
     /// so it is flagged and left out of time averages rather than counted at face value.
     /// </summary>
     public double MaxPanelBuildMinutes { get; init; } = 20;
+
+    /// <summary>
+    /// How close a PanelStopped has to be to a completion of the same name to be that panel being
+    /// killed rather than an unrelated stop.
+    /// </summary>
+    public double StopMatchMinutes { get; init; } = 2;
 }
 
 public class PanelClassification
@@ -43,14 +49,36 @@ public class PanelClassifier
 
     public PanelClassification Classify(IEnumerable<ProdLogEvent> events)
     {
+        var ordered = events.ToList();
+
+        var panels = Collect(ordered, out var restarts, out var badFieldCounts);
+        ApplyStops(ordered, panels);
+
+        var counterLive = DaysTheFastenerCounterWasReporting(panels);
+
+        return new PanelClassification
+        {
+            Panels = panels.Select(p => Judge(p, counterLive)).ToList(),
+            SameNameRestarts = restarts,
+            UnexpectedFieldCounts = badFieldCounts
+        };
+    }
+
+    /// <summary>
+    /// Every panel the log closed, before anything is judged.
+    /// </summary>
+    private static List<PanelRecord> Collect(
+        IReadOnlyList<ProdLogEvent> events, out int restarts, out int badFieldCounts)
+    {
         var panels = new List<PanelRecord>();
-        int restarts = 0, badFieldCounts = 0;
+        restarts = 0;
+        badFieldCounts = 0;
 
         string? openName = null;
         DateTime? openStart = null;
         var members = 0;
 
-        void CloseWithoutAssembly(PanelOutcome outcome, DateTime when, string sourceFile)
+        void CloseWithoutAssembly(DateTime when, string sourceFile)
         {
             if (openName is null) return;
 
@@ -59,7 +87,7 @@ public class PanelClassifier
                 Name = openName,
                 StartedAt = openStart,
                 EndedAt = when,
-                Outcome = outcome,
+                Outcome = PanelOutcome.Superseded,
                 MembersAssembled = members,
                 SourceFile = sourceFile
             });
@@ -91,7 +119,7 @@ public class PanelClassifier
                     }
                     else
                     {
-                        CloseWithoutAssembly(PanelOutcome.Superseded, e.Timestamp, e.SourceFile);
+                        CloseWithoutAssembly(e.Timestamp, e.SourceFile);
                         openName = name;
                         openStart = e.Timestamp;
                         members = 0;
@@ -104,10 +132,6 @@ public class PanelClassifier
                     if (openName is not null) members++;
                     break;
 
-                case ProdLogEventKind.PanelStopped:
-                    CloseWithoutAssembly(PanelOutcome.StoppedByOperator, e.Timestamp, e.SourceFile);
-                    break;
-
                 case ProdLogEventKind.PanelAssembled:
                 {
                     // PanelAssembled, timestamp, fasteners, name, cube, lineal, build, idle, junctions
@@ -117,7 +141,6 @@ public class PanelClassifier
                         break;
                     }
 
-                    var fasteners = e.Number(0);
                     var build = e.Number(4);
 
                     panels.Add(new PanelRecord
@@ -125,18 +148,14 @@ public class PanelClassifier
                         Name = e.Field(1) ?? openName ?? string.Empty,
                         StartedAt = openStart,
                         EndedAt = e.Timestamp,
-                        // Nothing fired and nothing assembled means the operator advanced past it.
-                        Outcome = fasteners > 0 || members > 0
-                            ? PanelOutcome.Completed
-                            : PanelOutcome.SteppedPast,
-                        FastenerCount = fasteners,
+                        FastenerCount = e.Number(0),
                         MembersAssembled = members,
                         Cube = e.Number(2),
                         Lineal = e.Number(3),
                         BuildMinutes = build,
                         IdleMinutes = e.Number(5),
                         Junctions = e.Number(6),
-                        BuildTimeImplausible = build > _options.MaxPanelBuildMinutes,
+                        BuildTimeImplausible = build > 20,
                         SourceFile = e.SourceFile
                     });
 
@@ -148,14 +167,92 @@ public class PanelClassifier
             }
         }
 
-        // A panel still open when the log ends is not evidence of anything - the week simply ran
-        // out. It is dropped rather than recorded as abandoned.
+        // A panel still open when the log ends is not evidence of anything - the week ran out.
+        return panels;
+    }
 
-        return new PanelClassification
+    /// <summary>
+    /// Ties each PanelStopped to the completion it killed.
+    /// <para>
+    /// A stop does not become a record of its own. The controller writes PanelStopped and then
+    /// still writes a PanelAssembled for the same panel a moment later, so the stop marks that
+    /// completion rather than standing beside it. A stop matching no completion is dropped - it
+    /// says nothing on its own.
+    /// </para>
+    /// </summary>
+    private void ApplyStops(IReadOnlyList<ProdLogEvent> events, List<PanelRecord> panels)
+    {
+        var window = TimeSpan.FromMinutes(_options.StopMatchMinutes);
+
+        foreach (var stop in events.Where(e => e.Kind == ProdLogEventKind.PanelStopped))
         {
-            Panels = panels,
-            SameNameRestarts = restarts,
-            UnexpectedFieldCounts = badFieldCounts
-        };
+            var name = stop.Field(0) ?? string.Empty;
+
+            var match = panels
+                .Where(p => p.Outcome != PanelOutcome.Superseded)
+                .Where(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))
+                .Where(p => (p.EndedAt - stop.Timestamp).Duration() <= window)
+                .OrderBy(p => (p.EndedAt - stop.Timestamp).Duration())
+                .FirstOrDefault();
+
+            if (match is null) continue;
+
+            panels[panels.IndexOf(match)] = match with { Stopped = true };
+        }
+    }
+
+    /// <summary>
+    /// The days the machine was demonstrably counting fasteners.
+    /// <para>
+    /// The counter is not always reporting. On a real extruder every panel built through one whole
+    /// month carried zero fired despite real build time and real junctions, and the counter came
+    /// back partway through a day. Applying a no-fasteners rule blindly would throw that month
+    /// away as faults, so the rule is switched on per day: a day where no panel with real build
+    /// time reports a single fastener is a day the counter was off, and build time alone decides.
+    /// </para>
+    /// </summary>
+    private static HashSet<DateOnly> DaysTheFastenerCounterWasReporting(IEnumerable<PanelRecord> panels)
+    {
+        var live = new HashSet<DateOnly>();
+
+        foreach (var panel in panels)
+        {
+            if (panel.Outcome == PanelOutcome.Superseded) continue;
+            if (panel.BuildMinutes > 0 && panel.FastenerCount > 0) live.Add(panel.Day);
+        }
+
+        return live;
+    }
+
+    /// <summary>
+    /// What became of one panel. The order matters: stepped past is tested before anything is
+    /// called a fault, because it is much the most common thing in the log and is not one.
+    /// </summary>
+    private static PanelRecord Judge(PanelRecord panel, HashSet<DateOnly> counterLive)
+    {
+        if (panel.Outcome == PanelOutcome.Superseded) return panel;
+
+        var live = counterLive.Contains(panel.Day);
+        panel = panel with { FastenerCounterLive = live };
+
+        // Advanced on the HMI without being built: no time spent and nothing fired.
+        if (panel.BuildMinutes <= 0 && panel.FastenerCount <= 0 && !panel.Stopped)
+            return panel with { Outcome = PanelOutcome.SteppedPast };
+
+        if (panel.Stopped)
+            return panel with { Outcome = PanelOutcome.StoppedByOperator };
+
+        // A zero count on a day the counter was off says nothing at all.
+        if (panel.FastenerCount <= 0 && live)
+        {
+            return panel with
+            {
+                Outcome = panel.JunctionsMissing > 0
+                    ? PanelOutcome.AbandonedPartWay
+                    : PanelOutcome.RanButNailedNothing
+            };
+        }
+
+        return panel with { Outcome = PanelOutcome.Completed };
     }
 }

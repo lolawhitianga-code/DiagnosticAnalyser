@@ -13,7 +13,8 @@ namespace DiagFileMonitor.Core.Reports;
 public static class ProductionReport
 {
     public static ReportModel Build(
-        ProductionSummary summary, string machineName = "", bool internalUse = true)
+        ProductionSummary summary, string machineName = "", bool internalUse = true,
+        IReadOnlyList<PanelRecord>? panels = null)
     {
         var title = string.IsNullOrWhiteSpace(machineName)
             ? "Production Report"
@@ -37,6 +38,9 @@ public static class ProductionReport
 
         report.Sections.Add(Overview(summary));
         report.Sections.Add(Monthly(summary));
+        if (!summary.Shift.Ignored) report.Sections.Add(WhereTheShiftWent(summary));
+        report.Sections.Add(NotBuilt(summary, panels));
+        report.Sections.Add(Daily(summary));
         report.Sections.Add(ShiftSection(summary));
         report.Sections.Add(DataQuality(summary));
 
@@ -59,19 +63,55 @@ public static class ProductionReport
             Subline = $"{s.PanelsPerProductionDay:F1} a day on the days this machine produced anything."
         });
 
-        var table = new TableBlock
+        // Output stands on its own three ways, so a machine building fewer but bigger panels is
+        // not read as a slower one.
+        section.Blocks.Add(new TableBlock
         {
-            Columns = { new ReportColumn("Measure", ColumnStyle.Text, 55), new ReportColumn("Figure", ColumnStyle.Number, 45) },
+            Columns =
+            {
+                new ReportColumn("Measured as", ColumnStyle.Text, 40),
+                new ReportColumn("Total", ColumnStyle.Number, 30),
+                new ReportColumn("A day", ColumnStyle.Number, 30)
+            },
             Rows =
             {
-                new ReportRow { Cells = { "Panels completed", $"{s.PanelsCompleted:N0}" } },
-                new ReportRow { Cells = { "Cube", $"{s.Cube:F1} m3" } },
-                new ReportRow { Cells = { "Lineal metres", $"{s.Lineal:N0} m" } },
+                new ReportRow { Cells = { "Panels", $"{s.PanelsCompleted:N0}", $"{s.PanelsPerProductionDay:F1}" } },
+                new ReportRow { Cells = { "Cube (m3)", $"{s.Cube:F1}",
+                    s.DaysWithOutput > 0 ? $"{s.Cube / s.DaysWithOutput:F2}" : "-" } },
+                new ReportRow { Cells = { "Lineal (m)", $"{s.Lineal:N0}",
+                    s.DaysWithOutput > 0 ? $"{s.Lineal / s.DaysWithOutput:N0}" : "-" } }
+            }
+        });
+
+        var table = new TableBlock
+        {
+            Columns = { new ReportColumn("", ColumnStyle.Text, 55), new ReportColumn("", ColumnStyle.Number, 45) },
+            Rows =
+            {
                 new ReportRow { Cells = { "Production days", $"{s.DaysWithOutput} of {s.CalendarDays}" } },
                 new ReportRow { Cells = { "Stepped past (routine HMI advance, not a fault)", $"{s.SteppedPast:N0}" } },
-                new ReportRow { Cells = { "Stopped by the operator", $"{s.StoppedByOperator:N0}" } },
+                new ReportRow { Cells = { "Panels that went wrong", $"{s.Faults:N0}" } },
                 new ReportRow { Cells = { "Fault rate", s.FaultRate is { } r ? $"{r:P2}" : "-" } },
-                new ReportRow { Cells = { "Availability (see shift model)", s.Availability is { } a ? $"{a:P1}" : "-" } }
+                new ReportRow
+                {
+                    Muted = s.Shift.Ignored,
+                    Cells =
+                    {
+                        "Availability",
+                        s.Availability is { } a ? $"{a:P1}" : "not reported - no shift model"
+                    }
+                },
+                new ReportRow
+                {
+                    Muted = s.Shift.Ignored,
+                    Cells =
+                    {
+                        "Panels an hour, while running / across the shift",
+                        s.RateWhileRunning is { } running && s.RateAcrossShift is { } across
+                            ? $"{running:F1} / {across:F1}"
+                            : "-"
+                    }
+                }
             }
         };
 
@@ -90,6 +130,182 @@ public static class ProductionReport
             });
         }
 
+        return section;
+    }
+
+    /// <summary>
+    /// Where the rostered time actually went. This is the section that tells a factory manager
+    /// whether a slow week was the machine or the way it was fed.
+    /// </summary>
+    private static ReportSection WhereTheShiftWent(ProductionSummary s)
+    {
+        var section = new ReportSection
+        {
+            Title = "Where the shift went",
+            Subtitle = "Rostered time, less breaks, split into running and waiting."
+        };
+
+        var planned = s.PlannedMinutes;
+        string Share(double minutes) => planned > 0 ? $"{minutes / planned:P1}" : "-";
+        string Hours(double minutes) => $"{minutes / 60:N1} hr";
+
+        section.Blocks.Add(new TableBlock
+        {
+            Columns =
+            {
+                new ReportColumn("", ColumnStyle.Text, 46),
+                new ReportColumn("Time", ColumnStyle.Number, 27),
+                new ReportColumn("Share", ColumnStyle.Number, 27)
+            },
+            Rows =
+            {
+                new ReportRow { Cells = { "Running", Hours(s.RunMinutes), Share(s.RunMinutes) } },
+                new ReportRow { Cells = { $"Unplanned stops ({s.UnplannedStops:N0})",
+                    Hours(s.StopMinutes), Share(s.StopMinutes) } },
+                new ReportRow { Cells = { "Start-up and tail",
+                    Hours(s.StartupAndTailMinutes), Share(s.StartupAndTailMinutes) } },
+                new ReportRow { Cells = { "Rostered, after breaks", Hours(planned), "100%" } }
+            }
+        });
+
+        section.Blocks.Add(new CalloutBlock
+        {
+            Lead = "Reading:",
+            Text = "Start-up and tail is rostered time either side of the day's work - the machine "
+                   + "was on shift and nothing had been sent to it yet, or nothing was left. It is "
+                   + "counted separately from stops because it is usually a scheduling matter "
+                   + "rather than a machine one."
+        });
+
+        return section;
+    }
+
+    /// <summary>
+    /// Panels the machine was asked for and did not make, each with a plain sentence saying why.
+    /// Stepped past is listed separately and loudly, because it is much the larger number and is
+    /// not a fault at all.
+    /// </summary>
+    private static ReportSection NotBuilt(ProductionSummary s, IReadOnlyList<PanelRecord>? panels)
+    {
+        var section = new ReportSection
+        {
+            Title = "Panels the machine did not build",
+            Subtitle = $"{s.SteppedPast:N0} stepped past, {s.Faults:N0} went wrong."
+        };
+
+        section.Blocks.Add(new CalloutBlock
+        {
+            Lead = "Stepped past is not a fault:",
+            Text = $"{s.SteppedPast:N0} panel(s) were advanced on the HMI without the machine being "
+                   + "asked to build them - no time on the clock and nothing fired. That is how the "
+                   + "job list is worked through. Counting it as a fault would drown out the "
+                   + $"{s.Faults:N0} that really went wrong."
+        });
+
+        var faults = panels?.Where(p => p.IsFault).OrderByDescending(p => p.EndedAt).ToList()
+                     ?? new List<PanelRecord>();
+
+        if (faults.Count == 0)
+        {
+            section.Blocks.Add(new NoteBlock
+            {
+                Text = s.Faults == 0
+                    ? "Nothing went wrong in this period."
+                    : "The panel-by-panel list is not available for this report."
+            });
+
+            return section;
+        }
+
+        var table = new TableBlock
+        {
+            Scroll = faults.Count > 12,
+            Columns =
+            {
+                new ReportColumn("When", ColumnStyle.Timestamp, 14),
+                new ReportColumn("Panel", ColumnStyle.Data, 14),
+                new ReportColumn("What happened", ColumnStyle.Text, 22),
+                new ReportColumn("Why it is recorded that way", ColumnStyle.Text, 50)
+            }
+        };
+
+        foreach (var panel in faults.Take(300))
+        {
+            table.Rows.Add(new ReportRow
+            {
+                Cells =
+                {
+                    $"{panel.EndedAt:yyyy-MM-dd}\n{panel.EndedAt:HH:mm:ss}",
+                    panel.Name,
+                    Describe(panel.Outcome),
+                    panel.Explain()
+                }
+            });
+        }
+
+        section.Blocks.Add(table);
+
+        if (faults.Count > 300)
+            section.Blocks.Add(new NoteBlock { Text = $"Showing the most recent 300 of {faults.Count:N0}." });
+
+        return section;
+    }
+
+    private static string Describe(PanelOutcome outcome) => outcome switch
+    {
+        PanelOutcome.StoppedByOperator => "Stopped by the operator",
+        PanelOutcome.RanButNailedNothing => "Ran but fired nothing",
+        PanelOutcome.AbandonedPartWay => "Abandoned part way",
+        PanelOutcome.SteppedPast => "Stepped past",
+        PanelOutcome.Superseded => "Superseded",
+        _ => "Built"
+    };
+
+    /// <summary>Every day in the window, including the ones with nothing on them.</summary>
+    private static ReportSection Daily(ProductionSummary s)
+    {
+        var section = new ReportSection
+        {
+            Title = "Output by day",
+            Subtitle = "Every calendar day in the window. A day at zero while the site was working "
+                       + "is downtime, not a missing record, so it is kept."
+        };
+
+        var table = new TableBlock
+        {
+            Scroll = s.Days.Count > 14,
+            EmptyText = "No days in this window.",
+            Columns =
+            {
+                new ReportColumn("Day", ColumnStyle.Timestamp, 16),
+                new ReportColumn("Panels", ColumnStyle.Number, 12),
+                new ReportColumn("Cube (m3)", ColumnStyle.Number, 14),
+                new ReportColumn("Lineal (m)", ColumnStyle.Number, 14),
+                new ReportColumn("Stepped past", ColumnStyle.Number, 14),
+                new ReportColumn("Went wrong", ColumnStyle.Number, 12),
+                new ReportColumn("Availability", ColumnStyle.Number, 18)
+            }
+        };
+
+        foreach (var day in s.Days)
+        {
+            table.Rows.Add(new ReportRow
+            {
+                Muted = !day.HadOutput,
+                Cells =
+                {
+                    day.Day.ToString("yyyy-MM-dd"),
+                    day.HadOutput ? $"{day.PanelsCompleted:N0}" : "nothing",
+                    day.HadOutput ? $"{day.Cube:F1}" : "-",
+                    day.HadOutput ? $"{day.Lineal:N0}" : "-",
+                    $"{day.SteppedPast:N0}",
+                    $"{day.Faults:N0}",
+                    day.Availability is { } a ? $"{a:P0}" : "-"
+                }
+            });
+        }
+
+        section.Blocks.Add(table);
         return section;
     }
 

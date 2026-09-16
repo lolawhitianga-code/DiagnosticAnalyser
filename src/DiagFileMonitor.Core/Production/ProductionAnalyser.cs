@@ -33,8 +33,7 @@ public static class ProductionAnalyser
             var done = onThisDay.Where(p => p.Outcome == PanelOutcome.Completed)
                 .OrderBy(p => p.EndedAt).ToList();
 
-            var planned = shift.PlannedMinutesPerDay;
-            var lost = UnplannedStopMinutes(done, shift);
+            var shape = HowTheDayWentThrough(done, shift);
 
             days.Add(new DayStats
             {
@@ -42,13 +41,15 @@ public static class ProductionAnalyser
                 PanelsCompleted = done.Count,
                 SteppedPast = onThisDay.Count(p => p.Outcome == PanelOutcome.SteppedPast),
                 StoppedByOperator = onThisDay.Count(p => p.Outcome == PanelOutcome.StoppedByOperator),
+                Faults = onThisDay.Count(p => p.IsFault),
                 Cube = done.Sum(p => p.Cube),
                 Lineal = done.Sum(p => p.Lineal),
-                // A day with no panels at all is not planned production time. Counting it as
-                // planned would drag availability down for a shutdown nobody was rostered for.
-                PlannedMinutes = done.Count > 0 ? planned : 0,
-                RunMinutes = done.Count > 0 ? Math.Max(0, planned - lost) : 0,
-                UnplannedStopMinutes = done.Count > 0 ? lost : 0
+                PlannedMinutes = shape.Planned,
+                RunMinutes = shape.Run,
+                UnplannedStopMinutes = shape.Stops,
+                UnplannedStops = shape.StopCount,
+                StartupMinutes = shape.Startup,
+                TailMinutes = shape.Tail
             });
         }
 
@@ -65,7 +66,9 @@ public static class ProductionAnalyser
                     Cube = g.Sum(d => d.Cube),
                     Lineal = g.Sum(d => d.Lineal),
                     DaysWithOutput = g.Count(d => d.HadOutput),
-                    Availability = planned > 0 ? g.Sum(d => d.RunMinutes) / planned : null
+                    Availability = planned > 0 && !shift.Ignored
+                        ? g.Sum(d => d.RunMinutes) / planned
+                        : null
                 };
             })
             .OrderBy(m => m.Year).ThenBy(m => m.Month)
@@ -80,6 +83,12 @@ public static class ProductionAnalyser
             PanelsCompleted = completed.Count,
             SteppedPast = panels.Count(p => p.Outcome == PanelOutcome.SteppedPast),
             StoppedByOperator = panels.Count(p => p.Outcome == PanelOutcome.StoppedByOperator),
+            RanButNailedNothing = panels.Count(p => p.Outcome == PanelOutcome.RanButNailedNothing),
+            AbandonedPartWay = panels.Count(p => p.Outcome == PanelOutcome.AbandonedPartWay),
+            DaysFastenerCounterOff = panels
+                .Where(p => p.Outcome != PanelOutcome.Superseded)
+                .GroupBy(p => p.Day)
+                .Count(g => g.All(p => !p.FastenerCounterLive)),
             Superseded = panels.Count(p => p.Outcome == PanelOutcome.Superseded),
             Cube = completed.Sum(p => p.Cube),
             Lineal = completed.Sum(p => p.Lineal),
@@ -93,32 +102,52 @@ public static class ProductionAnalyser
         };
     }
 
+    private record ShiftShape(double Planned, double Run, double Stops, int StopCount,
+        double Startup, double Tail);
+
     /// <summary>
-    /// Minutes lost to gaps between completed panels that were not a scheduled break.
+    /// How one day's rostered time was spent.
     /// <para>
-    /// A gap longer than the model's ceiling is a log gap of unknown length - a shutdown, a
-    /// weekend - so only the ceiling is counted, not the whole thing.
+    /// Rostered time less the wait before the first panel, the wait after the last, and every gap
+    /// in between that was longer than the threshold. Each of those has its break and off-shift
+    /// minutes taken out of the middle, so a gap that happens to span lunch has lunch deducted
+    /// rather than the whole gap being counted or the whole gap being dismissed.
     /// </para>
     /// </summary>
-    private static double UnplannedStopMinutes(IReadOnlyList<PanelRecord> completedInOrder, ShiftModel shift)
+    private static ShiftShape HowTheDayWentThrough(IReadOnlyList<PanelRecord> completedInOrder, ShiftModel shift)
     {
-        double lost = 0;
+        if (shift.Ignored || completedInOrder.Count == 0)
+            return new ShiftShape(0, 0, 0, 0, 0, 0);
+
+        var planned = shift.PlannedMinutesPerDay;
+        var day = completedInOrder[0].EndedAt.Date;
+
+        var shiftStart = day + shift.ShiftStart.ToTimeSpan();
+        var shiftEnd = day + shift.ShiftEnd.ToTimeSpan();
+
+        var first = completedInOrder[0].EndedAt;
+        var last = completedInOrder[^1].EndedAt;
+
+        // Rostered time before anything was made, and after the last thing was.
+        var startup = shift.ProductiveMinutes(shiftStart, first < shiftEnd ? first : shiftEnd);
+        var tail = shift.ProductiveMinutes(last > shiftStart ? last : shiftStart, shiftEnd);
+
+        double stops = 0;
+        var stopCount = 0;
 
         for (var i = 1; i < completedInOrder.Count; i++)
         {
-            var previous = completedInOrder[i - 1].EndedAt;
-            var next = completedInOrder[i].EndedAt;
-            var gap = (next - previous).TotalMinutes;
+            var gap = shift.ProductiveMinutes(completedInOrder[i - 1].EndedAt, completedInOrder[i].EndedAt);
 
             if (gap <= shift.UnplannedStopMinutes) continue;
 
-            // A gap that started inside a scheduled break is the break, not a stoppage.
-            if (shift.InBreak(previous)) continue;
-
-            lost += Math.Min(gap, shift.MaxGapMinutes);
+            stops += Math.Min(gap, shift.MaxGapMinutes);
+            stopCount++;
         }
 
-        return lost;
+        var run = Math.Max(0, planned - startup - tail - stops);
+
+        return new ShiftShape(planned, run, stops, stopCount, startup, tail);
     }
 
     /// <summary>

@@ -18,6 +18,16 @@ public enum PanelOutcome
     StoppedByOperator,
 
     /// <summary>
+    /// The machine spent time on it and fired nothing, on a day the fastener counter was working.
+    /// </summary>
+    RanButNailedNothing,
+
+    /// <summary>
+    /// Nothing fired and junctions left undone - it was given up on part way through.
+    /// </summary>
+    AbandonedPartWay,
+
+    /// <summary>
     /// A panel was open and a different panel name started, so this one never closed.
     /// <para>
     /// NOT counted as a fault. Panel names on these machines are reused labels rather than unique
@@ -31,7 +41,7 @@ public enum PanelOutcome
 }
 
 /// <summary>One panel the machine worked on, after classification.</summary>
-public class PanelRecord
+public record PanelRecord
 {
     /// <summary>Panel label from the log. Reused across jobs - never treat it as unique.</summary>
     public string Name { get; init; } = string.Empty;
@@ -74,6 +84,18 @@ public class PanelRecord
     public double Junctions { get; init; }
 
     /// <summary>
+    /// Junctions the panel was short of, where the log says how many were completed. ProdLogV2
+    /// does not carry that, so it stays null there.
+    /// </summary>
+    public double? JunctionsMissing { get; init; }
+
+    /// <summary>
+    /// Whether the fastener counter was reporting on the day this panel was built. Where it was
+    /// not, a zero count says nothing and build time alone decides whether the panel was made.
+    /// </summary>
+    public bool FastenerCounterLive { get; init; }
+
+    /// <summary>
     /// True where BuildMinutes is past the plausible ceiling, which means a missing stop event
     /// rather than a panel that really took that long. Excluded from time averages.
     /// </summary>
@@ -81,8 +103,38 @@ public class PanelRecord
 
     public string SourceFile { get; init; } = string.Empty;
 
+    /// <summary>The operator pressed Panel Stopped on this one before it finished.</summary>
+    public bool Stopped { get; init; }
+
     /// <summary>Real work happened, whatever else did.</summary>
     public bool DidWork => Outcome == PanelOutcome.Completed;
+
+    /// <summary>
+    /// The machine was asked for this panel and did not make it. Stepped past is not a fault - the
+    /// operator advancing the job list - and superseded is not either, since panel names are reused
+    /// labels and an unclosed start is somebody moving around the HMI.
+    /// </summary>
+    public bool IsFault => Outcome is PanelOutcome.StoppedByOperator
+        or PanelOutcome.RanButNailedNothing
+        or PanelOutcome.AbandonedPartWay;
+
+    /// <summary>Why it is recorded the way it is, for the report's own words.</summary>
+    public string Explain() => Outcome switch
+    {
+        PanelOutcome.SteppedPast =>
+            $"advanced on the HMI without being built - {Junctions:0} junction(s), {Lineal:0.##} m",
+        PanelOutcome.StoppedByOperator =>
+            "Panel Stopped was pressed before it finished",
+        PanelOutcome.AbandonedPartWay =>
+            $"nothing fired, and {JunctionsMissing:0} of {Junctions:0} junction(s) left undone",
+        PanelOutcome.RanButNailedNothing =>
+            BuildMinutes > 0
+                ? $"spent {BuildMinutes:0.#} min building and fired nothing across {Junctions:0} junction(s)"
+                : $"nothing fired across {Junctions:0} junction(s)",
+        PanelOutcome.Superseded =>
+            "left open when a different panel name started - the operator moving around the HMI",
+        _ => "built"
+    };
 
     public DateOnly Day => DateOnly.FromDateTime(EndedAt);
 }

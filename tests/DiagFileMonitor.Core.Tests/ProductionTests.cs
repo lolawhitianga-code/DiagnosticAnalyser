@@ -121,6 +121,16 @@ public class PanelClassifierTests
     }
 
     [Fact]
+    public void TimeSpentIsEnoughToNotBeSteppedPast()
+    {
+        // Stepped past means the operator advanced without the machine doing anything. Build time
+        // on the clock means it did something, whatever the fastener counter says.
+        var panels = Classify("PanelAssembled, 20260706 07:12:00, 0, 28, 0.05, 1.2, 1.9, 0, 8");
+
+        Assert.NotEqual(PanelOutcome.SteppedPast, Assert.Single(panels).Outcome);
+    }
+
+    [Fact]
     public void AnEmptyAssemblyIsSteppedPastNotAFault()
     {
         // The operator advancing the HMI past a panel that does not need building. On the M21737
@@ -181,14 +191,78 @@ public class PanelClassifierTests
     }
 
     [Fact]
-    public void PanelStoppedIsTheRealAbandonmentSignal()
+    public void PanelStoppedMarksTheCompletionItKilled()
     {
+        // The controller writes PanelStopped and then still writes a PanelAssembled for the same
+        // panel a moment later. The stop marks that completion rather than standing beside it.
         var panels = Classify(
             "PanelStarted, 20260706 07:10:00, 28",
             "MemberAssembled, 20260706 07:11:00, 1, 0, F, 0.009, 2.325",
-            "PanelStopped, 20260706 07:12:00, 28");
+            "PanelStopped, 20260706 07:12:00, 28",
+            "PanelAssembled, 20260706 07:12:04, 0, 28, 0.05, 1.2, 1.9, 0, 8");
 
         Assert.Equal(PanelOutcome.StoppedByOperator, Assert.Single(panels).Outcome);
+    }
+
+    [Fact]
+    public void AStopThatMatchesNoCompletionIsDropped()
+    {
+        // On its own a stop says nothing - the panel it refers to never closed, and an unclosed
+        // panel is not evidence of anything.
+        var panels = Classify(
+            "PanelStarted, 20260706 07:10:00, 28",
+            "PanelStopped, 20260706 07:12:00, 28");
+
+        Assert.Empty(panels.Where(p => p.Outcome == PanelOutcome.StoppedByOperator));
+    }
+
+    [Fact]
+    public void AStopLongAfterACompletionIsNotThatPanel()
+    {
+        var panels = Classify(
+            "PanelAssembled, 20260706 07:12:00, 8, 28, 0.139, 3, 2.8, 1, 20",
+            "PanelStopped, 20260706 07:30:00, 28");
+
+        Assert.Equal(PanelOutcome.Completed, Assert.Single(panels).Outcome);
+    }
+
+    [Fact]
+    public void TimeSpentWithNothingFiredIsAFaultWhereTheCounterWasWorking()
+    {
+        // Another panel that day fired, so the counter was demonstrably alive and a zero means
+        // the machine really did run and fire nothing.
+        var panels = Classify(
+            "PanelAssembled, 20260706 07:12:00, 8, A, 0.139, 3, 2.8, 1, 20",
+            "PanelAssembled, 20260706 07:20:00, 0, B, 0.100, 2, 3.1, 1, 16");
+
+        Assert.Equal(PanelOutcome.Completed, panels[0].Outcome);
+        Assert.Equal(PanelOutcome.RanButNailedNothing, panels[1].Outcome);
+    }
+
+    [Fact]
+    public void OnADayTheCounterWasOffAZeroSaysNothing()
+    {
+        // No panel that day reports a single fastener despite real build time, so the counter was
+        // off and build time alone decides. Without this rule a whole month of real production
+        // reads as faults.
+        var panels = Classify(
+            "PanelAssembled, 20260706 07:12:00, 0, A, 0.139, 3, 2.8, 1, 20",
+            "PanelAssembled, 20260706 07:20:00, 0, B, 0.100, 2, 3.1, 1, 16");
+
+        Assert.All(panels, p => Assert.Equal(PanelOutcome.Completed, p.Outcome));
+        Assert.All(panels, p => Assert.False(p.FastenerCounterLive));
+    }
+
+    [Fact]
+    public void TheCounterIsJudgedPerDayNotAcrossTheWholeLog()
+    {
+        var panels = Classify(
+            "PanelAssembled, 20260706 07:12:00, 8, A, 0.139, 3, 2.8, 1, 20",
+            "PanelAssembled, 20260707 07:20:00, 0, B, 0.100, 2, 3.1, 1, 16");
+
+        Assert.Equal(PanelOutcome.Completed, panels[0].Outcome);
+        // Different day, no fastener seen on it - so the zero is not held against it.
+        Assert.Equal(PanelOutcome.Completed, panels[1].Outcome);
     }
 
     [Fact]
@@ -309,7 +383,11 @@ public class ProductionAnalyserTests
             new PanelRecord { EndedAt = new DateTime(2026, 7, 6, 23, 30, 0), Outcome = PanelOutcome.Completed }
         }, model);
 
-        Assert.Equal(model.MaxGapMinutes, summary.Days.Single().UnplannedStopMinutes);
+        // Off-shift and break minutes come out of the gap first, so what is left is the rostered
+        // part of the day - which is less than the ceiling here.
+        var day = summary.Days.Single();
+        Assert.True(day.UnplannedStopMinutes <= model.MaxGapMinutes);
+        Assert.True(day.UnplannedStopMinutes > 0);
     }
 
     [Fact]
@@ -820,5 +898,131 @@ public class RawLogsFolderTests : IDisposable
         Assert.Equal(0, again.FilesRead);
         Assert.Equal(1, again.FilesSkippedAlreadyStored);
         Assert.Equal(1, Assert.Single(await import.StoredMachinesAsync()).Panels);
+    }
+}
+
+/// <summary>
+/// Availability. These pin the corrections found by reading the delivered DGM20771 report, where
+/// our own version was measurably wrong.
+/// </summary>
+public class AvailabilityTests
+{
+    private static ShiftModel Shift => new()
+    {
+        Name = "test",
+        ShiftStart = new TimeOnly(7, 0),
+        ShiftEnd = new TimeOnly(17, 0),
+        UnplannedStopMinutes = 20,
+        Breaks = new[] { new ShiftBreak("Lunch", new TimeOnly(12, 30), new TimeOnly(13, 0)) }
+    };
+
+    private static PanelRecord At(int hour, int minute) => new()
+    {
+        EndedAt = new DateTime(2026, 7, 6, hour, minute, 0), Outcome = PanelOutcome.Completed
+    };
+
+    [Fact]
+    public void ALongStoppageStartingAtLunchIsNotExcusedByLunch()
+    {
+        // The defect this fixes: a gap was discounted in full if it merely began during a break,
+        // so a three hour stoppage that started at 12:35 counted as nothing at all.
+        var summary = ProductionAnalyser.Summarise(new[] { At(12, 35), At(15, 35) }, Shift);
+
+        // Three hours, less the 25 minutes of lunch inside it.
+        Assert.Equal(155, summary.Days.Single().UnplannedStopMinutes, 0);
+    }
+
+    [Fact]
+    public void LunchItselfIsNotAStoppage()
+    {
+        var summary = ProductionAnalyser.Summarise(new[] { At(12, 25), At(13, 5) }, Shift);
+
+        // Forty minutes of clock, thirty of it lunch - ten left, under the threshold.
+        Assert.Equal(0, summary.Days.Single().UnplannedStopMinutes);
+    }
+
+    [Fact]
+    public void TheWaitBeforeTheFirstPanelCountsAgainstTheDay()
+    {
+        var summary = ProductionAnalyser.Summarise(new[] { At(9, 0), At(9, 10) }, Shift);
+
+        Assert.Equal(120, summary.Days.Single().StartupMinutes, 0);
+    }
+
+    [Fact]
+    public void TheWaitAfterTheLastPanelCountsToo()
+    {
+        var summary = ProductionAnalyser.Summarise(new[] { At(7, 10), At(15, 0) }, Shift);
+
+        Assert.Equal(120, summary.Days.Single().TailMinutes, 0);
+    }
+
+    [Fact]
+    public void ADayRunEndToEndIsFullyAvailable()
+    {
+        var panels = new List<PanelRecord>();
+        for (var minute = 0; minute <= 600; minute += 10)
+        {
+            panels.Add(new PanelRecord
+            {
+                EndedAt = new DateTime(2026, 7, 6, 7, 0, 0).AddMinutes(minute),
+                Outcome = PanelOutcome.Completed
+            });
+        }
+
+        var day = ProductionAnalyser.Summarise(panels, Shift).Days.Single();
+
+        Assert.Equal(0, day.UnplannedStopMinutes);
+        Assert.Equal(1, day.Availability!.Value, 3);
+    }
+
+    [Fact]
+    public void WithNoShiftModelAvailabilityIsNotReportedAtAll()
+    {
+        // Inventing a roster produces a number that looks measured and is not. Saying nothing is
+        // the honest answer, and the output figures are still measured.
+        var summary = ProductionAnalyser.Summarise(new[] { At(9, 0), At(15, 0) }, ShiftModel.NoShift);
+
+        Assert.Null(summary.Availability);
+        Assert.Null(summary.Days.Single().Availability);
+        Assert.Equal(0, summary.PlannedMinutes);
+
+        // Output is unaffected.
+        Assert.Equal(2, summary.PanelsCompleted);
+        Assert.Equal(1, summary.DaysWithOutput);
+    }
+
+    [Fact]
+    public void TheRateIsQuotedBothWhileRunningAndAcrossTheShift()
+    {
+        // Quoting only one lets an availability problem read as a speed problem: a machine that
+        // runs fast for four hours and sits idle for six is quick, and badly used.
+        var panels = new List<PanelRecord>();
+        for (var minute = 0; minute <= 240; minute += 10) panels.Add(At(9, 0) with
+        {
+            EndedAt = new DateTime(2026, 7, 6, 9, 0, 0).AddMinutes(minute)
+        });
+
+        var summary = ProductionAnalyser.Summarise(panels, Shift);
+
+        Assert.NotNull(summary.RateWhileRunning);
+        Assert.NotNull(summary.RateAcrossShift);
+        Assert.True(summary.RateWhileRunning > summary.RateAcrossShift,
+            $"{summary.RateWhileRunning} should beat {summary.RateAcrossShift}");
+    }
+
+    [Theory]
+    [InlineData(7, 0, 8, 0, 60)]      // an hour of rostered time
+    [InlineData(12, 0, 13, 30, 60)]   // 90 minutes of clock, 30 of it lunch
+    [InlineData(6, 0, 8, 0, 60)]      // an hour of it before the shift started
+    [InlineData(16, 0, 18, 0, 60)]    // an hour of it after the shift ended
+    public void RosteredMinutesLeaveOutBreaksAndOffShiftTime(
+        int fromHour, int fromMinute, int toHour, int toMinute, double expected)
+    {
+        var day = new DateTime(2026, 7, 6);
+
+        Assert.Equal(expected, Shift.ProductiveMinutes(
+            day.AddHours(fromHour).AddMinutes(fromMinute),
+            day.AddHours(toHour).AddMinutes(toMinute)), 0);
     }
 }

@@ -445,11 +445,29 @@ re-reads it.
 <!--help:production.shift-->
 ### Shift model
 
-Availability is worked out from this, not measured. It is planned shift time, less breaks, less any
-gap between panels that was not a break.
+Availability is worked out from this, not measured. It is rostered shift time, less breaks, less
+the wait before the first panel, the wait after the last, and every gap in between longer than the
+stop threshold.
 
 Two machines only compare on availability if they are on the same model, and the report prints
 whichever one was used. Change the model and every availability figure changes with it.
+
+**Ignore shift** is there for when nobody has confirmed the roster. Availability is then not
+reported at all rather than worked out from a guess - and panels, cube and lineal metres are
+measured either way, so the report is still worth having.
+
+<!--help:production.shifttimes-->
+### Setting the shift by hand
+
+Shift start and end, the breaks, and how long a gap has to be before it counts as an unplanned
+stop.
+
+Breaks are written as pairs of times: `10:00-10:15, 12:30-13:00`. Anything that is not a pair is
+skipped rather than losing the whole line, and the summary underneath says what was understood -
+check it matches before building.
+
+Breaks are taken out of the middle of a gap, not just off the ends. A three hour stoppage that
+happens to start at lunch counts as three hours less lunch, not as nothing at all.
 
 <!--help:production.import-->
 ### Import logs

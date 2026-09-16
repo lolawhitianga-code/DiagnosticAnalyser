@@ -83,7 +83,39 @@
                         <TextBlock Text="Shift model" help:Help.Topic="production.shift" Style="{StaticResource SectionHeading}" />
                         <TextBlock TextWrapping="Wrap" Foreground="{StaticResource BrandGrey}" Margin="0,0,0,8"
                                    Text="Availability is worked out from this, not measured. Two machines only compare on availability if they are on the same model, and the report prints whichever one was used." />
-                        <ComboBox ItemsSource="{Binding ShiftModelOptions}" SelectedIndex="{Binding ShiftModelIndex}" />
+                        <ComboBox ItemsSource="{Binding ShiftModelOptions}" SelectedIndex="{Binding ShiftModelIndex}"
+                                  Margin="0,0,0,8" />
+
+                        <StackPanel Visibility="{Binding ShiftIsEditable, Converter={StaticResource BoolToVisibility}}"
+                                    help:Help.Topic="production.shifttimes">
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Shift starts" Margin="0,0,0,4" />
+                                    <TextBox Text="{Binding ShiftStart, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Shift ends" Margin="0,0,0,4" />
+                                    <TextBox Text="{Binding ShiftEnd, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="4">
+                                    <TextBlock Text="Stop threshold (min)" Margin="0,0,0,4" />
+                                    <TextBox Text="{Binding StopThresholdMinutes, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="Breaks, e.g. 10:00-10:15, 12:30-13:00" Margin="0,0,0,4" />
+                            <TextBox Text="{Binding Breaks, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" />
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding ShiftSummary}" TextWrapping="Wrap"
+                                   Foreground="{StaticResource BrandGrey}" />
                     </StackPanel>
                 </Border>
             </StackPanel>

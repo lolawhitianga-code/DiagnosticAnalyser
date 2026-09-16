@@ -19,7 +19,24 @@ public class DayStats
     /// <summary>Minutes lost to gaps between panels that were not a scheduled break.</summary>
     public double UnplannedStopMinutes { get; init; }
 
+    /// <summary>Rostered minutes before the first panel of the day.</summary>
+    public double StartupMinutes { get; init; }
+
+    /// <summary>Rostered minutes after the last panel of the day.</summary>
+    public double TailMinutes { get; init; }
+
+    /// <summary>How many gaps counted as unplanned stops.</summary>
+    public int UnplannedStops { get; init; }
+
+    public int Faults { get; init; }
+
     public double? Availability => PlannedMinutes > 0 ? RunMinutes / PlannedMinutes : null;
+
+    /// <summary>Panels an hour while the machine was actually running.</summary>
+    public double? RateWhileRunning => RunMinutes > 0 ? PanelsCompleted / (RunMinutes / 60) : null;
+
+    /// <summary>Panels an hour measured across the whole rostered shift.</summary>
+    public double? RateAcrossShift => PlannedMinutes > 0 ? PanelsCompleted / (PlannedMinutes / 60) : null;
 
     public bool HadOutput => PanelsCompleted > 0;
 }
@@ -48,7 +65,15 @@ public class ProductionSummary
     public int PanelsCompleted { get; init; }
     public int SteppedPast { get; init; }
     public int StoppedByOperator { get; init; }
+    public int RanButNailedNothing { get; init; }
+    public int AbandonedPartWay { get; init; }
     public int Superseded { get; init; }
+
+    /// <summary>Panels the machine was asked for and did not make. Stepped past is not one.</summary>
+    public int Faults => StoppedByOperator + RanButNailedNothing + AbandonedPartWay;
+
+    /// <summary>Days the fastener counter was not reporting, so a zero count said nothing.</summary>
+    public int DaysFastenerCounterOff { get; init; }
 
     public double Cube { get; init; }
     public double Lineal { get; init; }
@@ -75,21 +100,34 @@ public class ProductionSummary
     {
         get
         {
+            if (Shift.Ignored) return null;
+
             var planned = Days.Sum(d => d.PlannedMinutes);
             return planned > 0 ? Days.Sum(d => d.RunMinutes) / planned : null;
         }
     }
 
+    public double PlannedMinutes => Days.Sum(d => d.PlannedMinutes);
+    public double RunMinutes => Days.Sum(d => d.RunMinutes);
+    public double StopMinutes => Days.Sum(d => d.UnplannedStopMinutes);
+    public double StartupAndTailMinutes => Days.Sum(d => d.StartupMinutes + d.TailMinutes);
+    public int UnplannedStops => Days.Sum(d => d.UnplannedStops);
+
+    /// <summary>Panels an hour while running, and across the whole rostered shift.</summary>
+    public double? RateWhileRunning => RunMinutes > 0 ? PanelsCompleted / (RunMinutes / 60) : null;
+    public double? RateAcrossShift => PlannedMinutes > 0 ? PanelsCompleted / (PlannedMinutes / 60) : null;
+
     /// <summary>
-    /// Operator-stopped panels as a share of everything that closed one way or another.
-    /// Superseded panels are deliberately excluded - see <see cref="PanelOutcome.Superseded"/>.
+    /// Panels that went wrong, as a share of everything that closed one way or another. Stepped
+    /// past is excluded because it is routine, and superseded because an unclosed start is the
+    /// operator moving around the HMI - see <see cref="PanelOutcome.Superseded"/>.
     /// </summary>
     public double? FaultRate
     {
         get
         {
-            var closed = PanelsCompleted + SteppedPast + StoppedByOperator;
-            return closed > 0 ? StoppedByOperator / (double)closed : null;
+            var closed = PanelsCompleted + SteppedPast + Faults;
+            return closed > 0 ? Faults / (double)closed : null;
         }
     }
 

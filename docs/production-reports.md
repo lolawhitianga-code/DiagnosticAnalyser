@@ -88,6 +88,11 @@ authoritative definition lives in the JavaScript inside
 reconciled against totals already signed off.*
 
 **5. The shift model is an assumption, not a measurement.** Availability changes completely with it.
+Since reading the delivered DGM20771 report the maths is now theirs - rostered time less start-up,
+tail and every gap over the threshold, with break and off-shift minutes taken out of the middle of
+each rather than off the ends. On M21737 that moved availability from 56.7% to 34.7%, into the
+range the delivered reports show. There is now also an **Ignore shift** option, which reports no
+availability at all rather than one built on a guessed roster.
 The round-the-clock Carters model is transcribed from the delivered reports, including the 03:30
 overnight gap those reports flag as not being on any official break sheet. Applying that model to
 M21737 gives 56.7% - but nobody has confirmed PlaceMakers runs round the clock, and if it runs a

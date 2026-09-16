@@ -40,11 +40,27 @@ public partial class ProductionReportViewModel : ObservableObject
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string _createdPath = string.Empty;
 
+    [ObservableProperty] private string _shiftStart = "07:00";
+    [ObservableProperty] private string _shiftEnd = "17:00";
+    [ObservableProperty] private string _breaks = "10:00-10:15, 12:30-13:00, 14:30-14:45";
+    [ObservableProperty] private string _stopThresholdMinutes = "20";
+
     public List<string> ShiftModelOptions { get; } = new()
     {
         "Single day shift, 07:00-17:00 with three breaks",
-        "Round the clock, six breaks (Carters Auckland)"
+        "Round the clock, six breaks (Carters Auckland)",
+        "My own times (set below)",
+        "Ignore shift - do not report availability"
     };
+
+    /// <summary>The boxes only matter for the hand-set model.</summary>
+    public bool ShiftIsEditable => ShiftModelIndex == 2;
+
+    /// <summary>What the chosen model comes to, in words, so a mistake is visible before building.</summary>
+    public string ShiftSummary => Shift.Ignored
+        ? "Availability will not be reported. Panels, cube and lineal metres are measured either way."
+        : $"{Shift.PlannedMinutesPerDay / 60:F1} rostered hours a day after "
+          + $"{Shift.Breaks.Count} break(s), stop threshold {Shift.UnplannedStopMinutes:F0} min.";
 
     public bool HasCreatedReport => CreatedPath.Length > 0;
 
@@ -144,9 +160,45 @@ public partial class ProductionReportViewModel : ObservableObject
             : "No ProdLogV2 files in this folder or below it.";
     }
 
-    private ShiftModel Shift => ShiftModelIndex == 1
-        ? ShiftModel.CartersAucklandRoundTheClock
-        : ShiftModel.SingleDayShift;
+    private ShiftModel Shift => ShiftModelIndex switch
+    {
+        1 => ShiftModel.CartersAucklandRoundTheClock,
+        2 => HandSetShift(),
+        3 => ShiftModel.NoShift,
+        _ => ShiftModel.SingleDayShift
+    };
+
+    /// <summary>
+    /// The roster typed into the boxes. Anything unreadable falls back to the day shift's value
+    /// rather than refusing to build the report - the summary line above shows what was understood.
+    /// </summary>
+    private ShiftModel HandSetShift()
+    {
+        var fallback = ShiftModel.SingleDayShift;
+
+        return new ShiftModel
+        {
+            Name = $"Set by hand: {ShiftStart.Trim()} to {ShiftEnd.Trim()}",
+            ShiftStart = TimeOnly.TryParse(ShiftStart.Trim(), out var from) ? from : fallback.ShiftStart,
+            ShiftEnd = TimeOnly.TryParse(ShiftEnd.Trim(), out var to) ? to : fallback.ShiftEnd,
+            Breaks = ShiftModel.ParseBreaks(Breaks),
+            UnplannedStopMinutes = double.TryParse(StopThresholdMinutes.Trim(), out var minutes) && minutes > 0
+                ? minutes
+                : fallback.UnplannedStopMinutes
+        };
+    }
+
+    partial void OnShiftModelIndexChanged(int value) => ShiftChanged();
+    partial void OnShiftStartChanged(string value) => ShiftChanged();
+    partial void OnShiftEndChanged(string value) => ShiftChanged();
+    partial void OnBreaksChanged(string value) => ShiftChanged();
+    partial void OnStopThresholdMinutesChanged(string value) => ShiftChanged();
+
+    private void ShiftChanged()
+    {
+        OnPropertyChanged(nameof(ShiftIsEditable));
+        OnPropertyChanged(nameof(ShiftSummary));
+    }
 
     /// <summary>
     /// A sweep across sub-folders takes each machine's serial from its own folder name, so the
@@ -234,7 +286,7 @@ public partial class ProductionReportViewModel : ObservableObject
             }
 
             var summary = ProductionAnalyser.Summarise(panels, Shift, serial, Site.Trim());
-            var model = ProductionReport.Build(summary, MachineName.Trim());
+            var model = ProductionReport.Build(summary, MachineName.Trim(), panels: panels);
             var html = new ReportHtmlRenderer().Render(model);
 
             Directory.CreateDirectory(_outputFolder);
