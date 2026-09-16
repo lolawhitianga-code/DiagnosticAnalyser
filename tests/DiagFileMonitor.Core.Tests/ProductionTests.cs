@@ -1026,3 +1026,195 @@ public class AvailabilityTests
             day.AddHours(toHour).AddMinutes(toMinute)), 0);
     }
 }
+
+/// <summary>
+/// The interactive report ships its figures to the browser as JSON and then draws them there, so
+/// the things worth testing in C# are that the payload is well formed, that it carries everything
+/// the page needs, and that nothing in a log file can break out of the script block.
+/// </summary>
+public class ProductionInteractiveReportTests
+{
+    private static ShiftModel Shift => new()
+    {
+        Name = "Test shift",
+        ShiftStart = new TimeOnly(7, 0),
+        ShiftEnd = new TimeOnly(17, 0),
+        UnplannedStopMinutes = 20,
+        Breaks = new[] { new ShiftBreak("Lunch", new TimeOnly(12, 30), new TimeOnly(13, 0)) }
+    };
+
+    private static PanelRecord Panel(int day, int hour, int minute, PanelOutcome outcome,
+        string name = "E5", double cube = 0.2) => new()
+    {
+        Name = name,
+        EndedAt = new DateTime(2026, 7, 6, hour, minute, 0).AddDays(day),
+        Outcome = outcome,
+        Cube = cube,
+        Lineal = cube * 20,
+        BuildMinutes = 4.5,
+        Junctions = 12
+    };
+
+    private static IReadOnlyList<PanelRecord> Sample() => new[]
+    {
+        Panel(0, 7, 30, PanelOutcome.Completed),
+        Panel(0, 7, 40, PanelOutcome.Completed),
+        Panel(0, 11, 20, PanelOutcome.StoppedByOperator),
+        Panel(0, 14, 10, PanelOutcome.Completed),
+        Panel(1, 8, 0, PanelOutcome.SteppedPast),
+        Panel(1, 9, 15, PanelOutcome.Completed),
+        Panel(2, 9, 15, PanelOutcome.Superseded)
+    };
+
+    private static string Payload()
+    {
+        var panels = Sample();
+        var summary = ProductionAnalyser.Summarise(panels, Shift, "M21737", "PlaceMakers Auckland");
+        return ProductionPayload.Build(summary, panels, "4.8M Raked Extruder", new DateTime(2026, 9, 16));
+    }
+
+    [Fact]
+    public void ThePayloadIsValidJsonCarryingEveryDayInTheWindow()
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(Payload());
+        var root = doc.RootElement;
+
+        Assert.Equal("M21737", root.GetProperty("serial").GetString());
+        Assert.Equal("4.8M Raked Extruder", root.GetProperty("name").GetString());
+        Assert.Equal("2026-07-06", root.GetProperty("day0").GetString());
+
+        // Three calendar days, and the middle one is kept even though the days either side of it
+        // are the interesting ones - a day at zero is the thing worth finding.
+        Assert.Equal(3, root.GetProperty("days").GetArrayLength());
+        Assert.Equal(12, root.GetProperty("days")[0].GetArrayLength());
+    }
+
+    [Fact]
+    public void SupersededStartsAreCountedButNotShippedAsPanels()
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(Payload());
+        var root = doc.RootElement;
+
+        // A panel left open when a different name started is the operator moving around the HMI.
+        // The page never draws one, so it is carried as a count and nothing else.
+        Assert.Equal(1, root.GetProperty("superseded").GetInt32());
+        Assert.Equal(6, root.GetProperty("panels").GetArrayLength());
+    }
+
+    [Fact]
+    public void EachPanelRowCarriesItsDayMinuteAndReason()
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(Payload());
+        var first = doc.RootElement.GetProperty("panels")[0];
+
+        Assert.Equal(8, first.GetArrayLength());
+        Assert.Equal(0, first[0].GetInt32());              // day 0
+        Assert.Equal(7 * 60 + 30, first[1].GetInt32());    // 07:30
+        Assert.Equal(0, first[2].GetInt32());              // completed
+        Assert.Equal(string.Empty, first[7].GetString());  // a completed panel needs no reason
+
+        // A panel that was not built says why, in the report's own words.
+        var stopped = doc.RootElement.GetProperty("panels")
+            .EnumerateArray().Single(p => p[2].GetInt32() == 2);
+        Assert.Contains("Panel Stopped", stopped[7].GetString());
+    }
+
+    [Fact]
+    public void TheShiftIsShippedSoThePageOpensOnTheModelTheReportWasBuiltWith()
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(Payload());
+        var shift = doc.RootElement.GetProperty("shift");
+
+        Assert.False(shift.GetProperty("ignored").GetBoolean());
+        Assert.Equal("07:00", shift.GetProperty("start").GetString());
+        Assert.Equal("17:00", shift.GetProperty("end").GetString());
+        Assert.Equal(20, shift.GetProperty("stopMin").GetDouble());
+        Assert.Equal("Lunch", shift.GetProperty("breaks")[0].GetProperty("n").GetString());
+    }
+
+    [Fact]
+    public void IgnoringTheShiftSaysSoRatherThanShippingZeroes()
+    {
+        var panels = Sample();
+        var summary = ProductionAnalyser.Summarise(panels, ShiftModel.NoShift, "M21737");
+        using var doc = System.Text.Json.JsonDocument.Parse(
+            ProductionPayload.Build(summary, panels, "Extruder", new DateTime(2026, 9, 16)));
+
+        Assert.True(doc.RootElement.GetProperty("shift").GetProperty("ignored").GetBoolean());
+    }
+
+    [Fact]
+    public void APanelNameCannotCloseTheScriptBlock()
+    {
+        // Panel names come from a log file on a customer's machine. Nothing in one may be able to
+        // end the script block early and turn the rest of the payload into markup.
+        var panels = new[] { Panel(0, 8, 0, PanelOutcome.Completed, "</script><img src=x onerror=alert(1)>") };
+        var summary = ProductionAnalyser.Summarise(panels, Shift, "M1");
+
+        var json = ProductionPayload.Build(summary, panels, "Extruder", new DateTime(2026, 9, 16));
+
+        Assert.DoesNotContain("</script", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<img", json, StringComparison.OrdinalIgnoreCase);
+
+        // Still valid JSON, and the name survives intact once the browser has decoded it.
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        Assert.Equal("</script><img src=x onerror=alert(1)>",
+            doc.RootElement.GetProperty("panels")[0][6].GetString());
+    }
+
+    [Fact]
+    public void ThePageIsSelfContainedWithNothingFetchedFromTheInternet()
+    {
+        var panels = Sample();
+        var summary = ProductionAnalyser.Summarise(panels, Shift, "M21737", "PlaceMakers Auckland");
+        var html = ProductionInteractiveReport.Build(summary, panels, "4.8M Raked Extruder",
+            new DateTime(2026, 9, 16));
+
+        // A report emailed to a site has to read the same on a machine with no internet.
+        Assert.DoesNotContain("http://", html);
+        Assert.DoesNotContain("fonts.googleapis.com", html);
+        Assert.DoesNotContain("<script src", html);
+
+        // The one outbound link is the footer, which is a link and not a fetch.
+        Assert.Contains("https://www.spida.com", html);
+    }
+
+    [Fact]
+    public void ThePageCarriesTheControlsThatMakeItWorthOpening()
+    {
+        var panels = Sample();
+        var summary = ProductionAnalyser.Summarise(panels, Shift, "M21737");
+        var html = ProductionInteractiveReport.Build(summary, panels, "Extruder",
+            new DateTime(2026, 9, 16));
+
+        foreach (var id in new[] { "tab-month", "tab-week", "tab-day", "tab-hour",
+                                   "met-panels", "met-cube", "met-lineal",
+                                   "frameSvg", "dayChips", "btnApplyShift", "sIgnore" })
+            Assert.Contains($"id=\"{id}\"", html);
+
+        Assert.Contains("var PAYLOAD = {", html);
+    }
+
+    [Fact]
+    public void AMachineNameWithMarkupInItIsEscapedInTheHeader()
+    {
+        var panels = Sample();
+        var summary = ProductionAnalyser.Summarise(panels, Shift, "<b>M1</b>");
+        var html = ProductionInteractiveReport.Build(summary, panels, "<script>bad()</script>",
+            new DateTime(2026, 9, 16));
+
+        Assert.DoesNotContain("<script>bad()", html);
+        Assert.Contains("&lt;script&gt;bad()", html);
+    }
+
+    [Fact]
+    public void AnEmptyWindowStillProducesAPageRatherThanThrowing()
+    {
+        var summary = ProductionAnalyser.Summarise(Array.Empty<PanelRecord>(), Shift, "M1");
+        var html = ProductionInteractiveReport.Build(summary, Array.Empty<PanelRecord>(), "Extruder",
+            new DateTime(2026, 9, 16));
+
+        Assert.Contains("var PAYLOAD = {", html);
+        Assert.Contains("\"days\":[]", html);
+    }
+}

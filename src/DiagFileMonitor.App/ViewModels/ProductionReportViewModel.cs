@@ -286,18 +286,27 @@ public partial class ProductionReportViewModel : ObservableObject
             }
 
             var summary = ProductionAnalyser.Summarise(panels, Shift, serial, Site.Trim());
-            var model = ProductionReport.Build(summary, MachineName.Trim(), panels: panels);
-            var html = new ReportHtmlRenderer().Render(model);
 
             Directory.CreateDirectory(_outputFolder);
-            var path = Path.Combine(_outputFolder,
-                $"production-{Slug(serial)}-{summary.To:yyyy-MM-dd}.html");
+            var stem = $"production-{Slug(serial)}-{summary.To:yyyy-MM-dd}";
 
-            await File.WriteAllTextAsync(path, html);
+            // The page you work: period and measure switchable, charts drawn in the page, and the
+            // shift editable so a site can put its own roster in without asking us to rebuild it.
+            var path = Path.Combine(_outputFolder, $"{stem}.html");
+            await File.WriteAllTextAsync(path, ProductionInteractiveReport.Build(
+                summary, panels, MachineName.Trim(), DateTime.Now));
+
+            // The same figures laid out to print or paste into a ticket. Both are written every
+            // time because they answer different questions and neither replaces the other.
+            var printPath = Path.Combine(_outputFolder, $"{stem}-print.html");
+            var model = ProductionReport.Build(summary, MachineName.Trim(), panels: panels);
+            await File.WriteAllTextAsync(printPath, new ReportHtmlRenderer().Render(model));
+
             CreatedPath = path;
 
             StatusMessage = $"{summary.PanelsCompleted:N0} panel(s) over {summary.DaysWithOutput} "
-                            + $"production day(s). Saved as {Path.GetFileName(path)}.";
+                            + $"production day(s). Saved as {Path.GetFileName(path)}, with a "
+                            + $"printable copy as {Path.GetFileName(printPath)}.";
         }
         catch (Exception ex)
         {

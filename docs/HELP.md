@@ -491,6 +491,17 @@ looks out of date.
 Builds the production report from what is stored - panels, cube, lineal metres, output by month and
 availability. **Open it** opens the file.
 
+Two files are written. The one that opens is a page you work: switch the period between **month,
+week, day and hour**, switch the measure between **panels, cube and lineal metres**, click any bar
+or day to drill into it, and read the day drawn as a wall - one stud per panel, stood where it
+finished, with breaks, stops and off-shift time shaded behind. The second, ending `-print`, is the
+same figures laid out flat to print or paste into a ticket.
+
+The page has its own **Shift and breaks** panel. Editing it there re-works availability, the stops
+and the rates in front of you - so a site can put its own roster in. It changes nothing on this PC.
+
+Everything is inside the one file, so it reads the same on a site PC with no internet.
+
 ---
 
 ## Searching inside logs

@@ -112,6 +112,45 @@ manifest ships alongside these exports that would settle identity properly.*
 **8. `UserLogout` was not in the reference guide's event list.** It turns up in a real bundle's
 production report. Recognised now, but unused - like `UserLogin`.
 
+## The report is a page you work, not a page you read
+
+The delivered DGM20771 report is interactive, and copying only its look was missing the point. The
+app now writes two files from the same figures:
+
+| File | What it is for |
+| --- | --- |
+| `production-<serial>-<date>.html` | The one that opens. Period switches between month, week, day and hour; measure switches between panels, cube and lineal metres; bars and day chips drill down; the day is drawn as a wall of studs. |
+| `production-<serial>-<date>-print.html` | The same figures laid out flat, to print or paste into a ticket. |
+
+Both are self-contained. No CDN, no web fonts, no second file - a report emailed to a site reads
+the same on a PC with no internet.
+
+### What the page recomputes, and why that is duplication on purpose
+
+`ProductionPayload` ships the panel rows and the C#-computed per-day totals. The page then works
+the availability maths out again in JavaScript, because the shift model is editable in the page -
+a roster box that cannot change anything is not worth having, and a site knows its own roster
+better than we do. The JavaScript rules are ports of the C# ones:
+
+- rostered minutes are shift length less breaks;
+- a gap counts as an unplanned stop when more than the threshold of it was rostered production,
+  with break and off-shift minutes taken out of the middle rather than off the ends;
+- run time is rostered time less start-up, tail and every stop.
+
+Two implementations of one rule will drift, so the page checks itself: on load it compares its own
+availability for the shift the report shipped with against the figure C# put in the payload, and
+prints a "Check this" note in the notice box if they differ by more than a percentage point. If
+that note ever appears in the field, one of the two is wrong.
+
+### What the page deliberately does not show
+
+The DGM20771 template drives several panels off a **Details CSV** export, which ProdLogV2 does not
+carry: load time against a per-stage target, nails fired against nails called for, and plate width.
+Those sections are left out rather than filled with an invented target. The one place a comparison
+was wanted - colouring the studs - uses this machine's own **median build time** as the reference,
+with the same 1.25x and 2x bands the template uses, and the legend says so in those words rather
+than claiming a target.
+
 ## Two sources, and why both
 
 Production data arrives two ways, and they complement each other exactly:
