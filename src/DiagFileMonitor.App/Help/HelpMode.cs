@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Documents;
 using DiagFileMonitor.App.Services;
 
 namespace DiagFileMonitor.App.Help;
@@ -27,6 +28,9 @@ public class HelpMode
 
     /// <summary>What the pointer went down on, so the release acts on the same thing.</summary>
     private DependencyObject? _pressedOn;
+
+    /// <summary>The transparent sheet that catches clicks the window never hears about.</summary>
+    private HelpOverlay? _overlay;
 
     public HelpMode(Window window) => _window = window;
 
@@ -71,6 +75,8 @@ public class HelpMode
         _previousCursor = _window.Cursor;
         _window.Cursor = System.Windows.Input.Cursors.Help;
 
+        AddOverlay();
+
         _window.PreviewMouseLeftButtonDown += OnPressed;
         _window.PreviewMouseLeftButtonUp += OnReleased;
         _window.PreviewKeyDown += OnKey;
@@ -86,6 +92,8 @@ public class HelpMode
 
         _on = false;
         _window.Cursor = _previousCursor;
+
+        RemoveOverlay();
 
         _window.PreviewMouseLeftButtonDown -= OnPressed;
         _window.PreviewMouseLeftButtonUp -= OnReleased;
@@ -124,6 +132,34 @@ public class HelpMode
     }
 
     private void OnWindowLostFocus(object? sender, EventArgs e) => _popup.Close();
+
+    private void AddOverlay()
+    {
+        if (_window.Content is not UIElement content) return;
+
+        var layer = AdornerLayer.GetAdornerLayer(content);
+        if (layer is null) return;
+
+        // No handlers on the sheet itself. A tunnelling preview event starts at the window and
+        // reaches the sheet last, so the window's handler runs first and marks it handled - the
+        // sheet would never hear its own clicks. What the sheet is for is making the click land on
+        // something hit-testable at all, so the window's handler fires for a greyed out control
+        // instead of the event never being raised.
+        _overlay = new HelpOverlay(content);
+        layer.Add(_overlay);
+    }
+
+    private void RemoveOverlay()
+    {
+        if (_overlay is null) return;
+
+        if (_window.Content is UIElement content)
+        {
+            AdornerLayer.GetAdornerLayer(content)?.Remove(_overlay);
+        }
+
+        _overlay = null;
+    }
 
     /// <summary>
     /// The press. Swallowed so the control is not activated, and the element under the pointer is
@@ -184,6 +220,13 @@ public class HelpMode
     /// </summary>
     private DependencyObject? ElementUnder(System.Windows.Input.MouseButtonEventArgs e)
     {
+        var point = e.GetPosition(_window);
+
+        // Through the sheet to whatever is really there. Without the sheet every hit would be the
+        // sheet itself; without the hit test a disabled control would never be found.
+        var found = _overlay?.ElementUnder(point, _window);
+        if (found is not null) return found;
+
         DependencyObject? hit = null;
 
         System.Windows.Media.VisualTreeHelper.HitTest(
@@ -194,7 +237,7 @@ public class HelpMode
                 hit = result.VisualHit;
                 return System.Windows.Media.HitTestResultBehavior.Stop;
             },
-            new System.Windows.Media.PointHitTestParameters(e.GetPosition(_window)));
+            new System.Windows.Media.PointHitTestParameters(point));
 
         return hit ?? e.OriginalSource as DependencyObject;
     }
