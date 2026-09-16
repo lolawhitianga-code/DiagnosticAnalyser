@@ -123,6 +123,21 @@ Shows just the bundles marked as known-good. Use it to find the benchmark for a 
 
 Clears the search box, the status filter and both dates in one go.
 
+<!--help:common.close-->
+### Close
+
+Shuts this window. Nothing is lost - anything already saved or built stays where it is.
+
+<!--help:common.greyedout-->
+### Why is a button greyed out?
+
+A greyed out button is waiting for something. Most need a file selected in the list first;
+**Compare** also needs a benchmark set, and **Create package** needs the two feedback boxes filled
+in.
+
+The **?** works on greyed out buttons too, so you can find out what one is for without having to
+make it available first.
+
 <!--help:main.grid-->
 ### The file list
 
@@ -202,6 +217,12 @@ notes** writes them against this bundle so they are still there next time.
 **Copy summary for ticket** puts a short summary on the clipboard - machine, serial, customer,
 what arrived and when - ready to paste into a ticket.
 
+<!--help:main.clearbenchmark-->
+### Clear benchmark (right-click)
+
+Unsets the benchmark master, so no bundle is held up as the one to measure against. Compare stays
+greyed out until another is set.
+
 <!--help:main.setmaster-->
 ### Set as benchmark master (right-click)
 
@@ -215,6 +236,11 @@ Pick a bundle from a machine running well, ideally the same model as the machine
 
 Flags this bundle as an example of the machine working properly. Baselines are a reference library;
 the benchmark master is the single one Compare uses.
+
+<!--help:main.showall-->
+### Show all machines (right-click)
+
+Undoes **Show this machine's history** and puts every bundle back in the list.
 
 <!--help:main.machinehistory-->
 ### Show this machine's history (right-click)
@@ -333,6 +359,12 @@ and how to find out. It will not make a number up.
 **Where that number came from** is printed beside the estimate, so nobody later mistakes a guess
 for a measurement.
 
+<!--help:report.showfile-->
+### Show me the file
+
+Opens Explorer with the report highlighted, so you can attach it to an email or drop it somewhere
+shared.
+
 <!--help:report.build-->
 ### Build report
 
@@ -411,6 +443,12 @@ Production data also arrives on its own: every diagnostic `.szip` carries a few 
 because a bundle knows its own serial that data is filed automatically when the bundle is
 processed.
 
+<!--help:production.refresh-->
+### Refresh
+
+Re-reads what this PC has stored. Only needed after importing from somewhere else, or if the list
+looks out of date.
+
 <!--help:production.build-->
 ### Build report
 
@@ -471,6 +509,17 @@ added to the existing ticket instead.
 
 Adds the analysis as an internal note rather than a reply the customer sees. Leave this on unless
 you want customers reading the raw analysis.
+
+<!--help:settings.save-->
+### Save
+
+Writes these settings and closes. Nothing here takes effect until you press it.
+
+<!--help:settings.ssl-->
+### SSL
+
+Whether your mail server wants an encrypted connection. Almost always yes on port 587 or 465. If
+test emails fail with a connection error, this is the first thing to try changing.
 
 <!--help:settings.utc-->
 ### Timestamps in support file names are UTC

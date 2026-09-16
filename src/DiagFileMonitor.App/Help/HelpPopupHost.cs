@@ -22,7 +22,9 @@ public class HelpPopupHost
     private readonly Popup _popup = new()
     {
         AllowsTransparency = true,
-        StaysOpen = false,
+        // True, so releasing the mouse does not count as a click outside and shut it. The mode
+        // closes it itself - on the next help click, Escape, or leaving the window.
+        StaysOpen = true,
         Placement = PlacementMode.Bottom,
         PopupAnimation = PopupAnimation.Fade,
         HorizontalOffset = 0,

@@ -62,6 +62,7 @@ def check_help_topics():
     prose_only = {
         "analysis.report",
         "main.grid",
+        "common.greyedout",
     }
 
     used = set()
@@ -72,6 +73,33 @@ def check_help_topics():
             if topic not in defined:
                 problems.append(
                     f"{xaml_file.name}: help topic '{topic}' is not in docs/HELP.md")
+
+    # Every button, tick and menu item needs a topic. The ? works on greyed out controls too, so
+    # "it is never clickable anyway" is not a reason to leave one out - a greyed out button is
+    # exactly the one somebody wants explained.
+    for xaml_file in sorted(APP.rglob("*.xaml")):
+        text = xaml_file.read_text()
+
+        for m in re.finditer(r"<(Button|CheckBox|MenuItem)\b", text):
+            i, quote = m.end(), None
+            while i < len(text):
+                c = text[i]
+                if quote:
+                    if c == quote: quote = None
+                elif c in "\"'":
+                    quote = c
+                elif c == ">":
+                    break
+                i += 1
+
+            tag = text[m.start():i + 1]
+            if "help:Help.Topic" in tag or "HelpModeButton" in tag:
+                continue
+
+            label = re.search(r"(?:Content|Header)=\"([^\"]*)\"", tag)
+            problems.append(
+                f"{xaml_file.name}: {m.group(1)} "
+                f"'{label.group(1) if label else '?'}' has no help:Help.Topic")
 
     for topic in sorted(defined - used - prose_only):
         problems.append(

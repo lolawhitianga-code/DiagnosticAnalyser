@@ -15,9 +15,9 @@
 
         <Border DockPanel.Dock="Bottom" Style="{StaticResource Panel}" Margin="0,10,0,0">
             <DockPanel>
-                <Button DockPanel.Dock="Right" Content="Close" Width="90" Margin="8,0,0,0"
+                <Button DockPanel.Dock="Right" Content="Close" help:Help.Topic="common.close" Width="90" Margin="8,0,0,0"
                         Click="Close_Click" />
-                <Button DockPanel.Dock="Right" Content="Show me the file" Width="130"
+                <Button DockPanel.Dock="Right" Content="Show me the file" help:Help.Topic="report.showfile" Width="130"
                         Command="{Binding ShowFolderCommand}" />
                 <Button DockPanel.Dock="Right" Content="Open it" help:Help.Topic="report.build" Width="90" Margin="0,0,8,0"
                         Command="{Binding OpenReportCommand}" />
@@ -64,14 +64,14 @@
                 <Border Style="{StaticResource Panel}" Margin="0,10,0,0">
                     <StackPanel>
                         <TextBlock Text="What to count" help:Help.Topic="report.kinds" Style="{StaticResource SectionHeading}" />
-                        <CheckBox Content="Plate sensor drop-outs" IsChecked="{Binding IncludePlateSensor}" />
-                        <CheckBox Content="Drive and motion controller faults"
+                        <CheckBox Content="Plate sensor drop-outs" help:Help.Topic="report.kinds" IsChecked="{Binding IncludePlateSensor}" />
+                        <CheckBox Content="Drive and motion controller faults" help:Help.Topic="report.kinds"
                                   IsChecked="{Binding IncludeDriveFaults}" />
-                        <CheckBox Content="Motors that never confirmed they were running"
+                        <CheckBox Content="Motors that never confirmed they were running" help:Help.Topic="report.kinds"
                                   IsChecked="{Binding IncludeMotorConfirm}" />
-                        <CheckBox Content="Faults the machine notes recognise"
+                        <CheckBox Content="Faults the machine notes recognise" help:Help.Topic="report.kinds"
                                   IsChecked="{Binding IncludeKnownFaults}" />
-                        <CheckBox Content="Software errors from ErrLog.txt"
+                        <CheckBox Content="Software errors from ErrLog.txt" help:Help.Topic="report.kinds"
                                   IsChecked="{Binding IncludeSoftwareErrors}" />
                     </StackPanel>
                 </Border>

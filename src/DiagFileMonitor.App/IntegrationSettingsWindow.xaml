@@ -29,7 +29,7 @@
                         IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}" />
                 <Button Content="Send test email" help:Help.Topic="settings.email" Command="{Binding TestEmailCommand}" Width="120" Margin="0,0,6,0"
                         IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}" />
-                <Button Content="Save" Command="{Binding SaveCommand}" Width="90" IsDefault="True"
+                <Button Content="Save" help:Help.Topic="settings.save" Command="{Binding SaveCommand}" Width="90" IsDefault="True"
                         Style="{StaticResource PrimaryButton}" />
             </StackPanel>
         </StackPanel>
@@ -114,7 +114,7 @@
                             <TextBox Text="{Binding SmtpHost}" Width="220" Margin="0,0,10,0" />
                             <TextBlock Text="Port" Style="{StaticResource FieldLabel}" />
                             <TextBox Text="{Binding SmtpPort}" Width="55" Margin="0,0,10,0" />
-                            <CheckBox Content="SSL" IsChecked="{Binding SmtpUseSsl}" VerticalAlignment="Center" />
+                            <CheckBox Content="SSL" help:Help.Topic="settings.ssl" IsChecked="{Binding SmtpUseSsl}" VerticalAlignment="Center" />
                         </StackPanel>
 
                         <TextBlock Text="Username" />

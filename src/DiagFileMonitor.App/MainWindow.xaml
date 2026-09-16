@@ -234,7 +234,7 @@
                 Background="#FFF3E8" BorderBrush="#E0A66A"
                 Visibility="{Binding HasMaster, Converter={StaticResource BoolToVisibility}}">
             <DockPanel>
-                <Button DockPanel.Dock="Right" Content="Clear benchmark" Width="120"
+                <Button DockPanel.Dock="Right" Content="Clear benchmark" help:Help.Topic="main.clearbenchmark" Width="120"
                         Command="{Binding ClearMasterCommand}" />
                 <TextBlock Text="{Binding MasterLabel}" VerticalAlignment="Center"
                            TextWrapping="Wrap" Margin="0,0,10,0" />
@@ -245,7 +245,7 @@
                 Background="{StaticResource BrandBlueTint}" BorderBrush="{StaticResource BrandBlue}"
                 Visibility="{Binding IsMachineFilterActive, Converter={StaticResource BoolToVisibility}}">
             <DockPanel>
-                <Button DockPanel.Dock="Right" Content="Show all machines" Width="130"
+                <Button DockPanel.Dock="Right" Content="Show all machines" help:Help.Topic="main.showall" Width="130"
                         Command="{Binding ClearMachineFilterCommand}" />
                 <TextBlock Text="{Binding MachineHistory.Headline}" VerticalAlignment="Center"
                            TextWrapping="Wrap" Margin="0,0,10,0" />
@@ -264,19 +264,19 @@
                     <Setter Property="ContextMenu">
                         <Setter.Value>
                             <ContextMenu>
-                                <MenuItem Header="Open extracted _folder"
+                                <MenuItem Header="Open extracted _folder" help:Help.Topic="main.openfolder"
                                           Command="{Binding PlacementTarget.Tag.OpenExtractedFolderCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding}"
                                           IsEnabled="{Binding HasExtractedFolder}" />
-                                <MenuItem Header="_Analyse selected file(s)"
+                                <MenuItem Header="_Analyse selected file(s)" help:Help.Topic="main.analyse"
                                           Command="{Binding PlacementTarget.Tag.AnalyseSelectedCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                 <MenuItem Header="Set as benchmark _master" help:Help.Topic="main.setmaster"
                                           Command="{Binding PlacementTarget.Tag.SetMasterCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding}" />
-                                <MenuItem Header="Send _feedback to Claude"
+                                <MenuItem Header="Send _feedback to Claude" help:Help.Topic="main.sendtoclaude"
                                           Command="{Binding PlacementTarget.Tag.SendFeedbackCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                 <Separator />
-                                <MenuItem Header="Compare _with benchmark"
+                                <MenuItem Header="Compare _with benchmark" help:Help.Topic="main.compare"
                                           Command="{Binding PlacementTarget.Tag.CompareWithMasterCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                 <Separator />
                                 <MenuItem Header="Mark / unmark as known-good _baseline" help:Help.Topic="main.markbaseline"
@@ -285,19 +285,19 @@
                                 <MenuItem Header="Show this machine's _history" help:Help.Topic="main.machinehistory"
                                           Command="{Binding PlacementTarget.Tag.ShowMachineHistoryCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding}" />
-                                <MenuItem Header="_Copy summary for ticket"
+                                <MenuItem Header="_Copy summary for ticket" help:Help.Topic="main.casenotes"
                                           Command="{Binding PlacementTarget.Tag.CopySummaryCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding}" />
                                 <Separator />
-                                <MenuItem Header="Open _errorlog.txt"
+                                <MenuItem Header="Open _errorlog.txt" help:Help.Topic="main.openlogs"
                                           Command="{Binding PlacementTarget.Tag.OpenErrorLogCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding}"
                                           IsEnabled="{Binding HasErrorLog}" />
-                                <MenuItem Header="Open _machinelog.txt"
+                                <MenuItem Header="Open _machinelog.txt" help:Help.Topic="main.openlogs"
                                           Command="{Binding PlacementTarget.Tag.OpenMachineLogCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding}"
                                           IsEnabled="{Binding HasMachineLog}" />
-                                <MenuItem Header="Open _changelog.txt"
+                                <MenuItem Header="Open _changelog.txt" help:Help.Topic="main.openlogs"
                                           Command="{Binding PlacementTarget.Tag.OpenChangeLogCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding}"
                                           IsEnabled="{Binding HasChangeLog}" />

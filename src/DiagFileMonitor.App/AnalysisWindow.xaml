@@ -13,7 +13,7 @@
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
             <Button Content="Copy to clipboard" help:Help.Topic="analysis.copy" Command="{Binding CopyCommand}" Width="130" Margin="0,0,6,0"
                     Style="{StaticResource PrimaryButton}" />
-            <Button Content="Close" Click="Close_Click" Width="90" IsCancel="True" />
+            <Button Content="Close" help:Help.Topic="common.close" Click="Close_Click" Width="90" IsCancel="True" />
         </StackPanel>
 
         <TextBlock DockPanel.Dock="Top" Text="{Binding Heading}" Style="{StaticResource SectionHeading}"
