@@ -68,11 +68,19 @@ public class KnowledgeFindings
     /// <summary>Motors told to run that never reported back that they were running.</summary>
     public MotorConfirmFindings MotorConfirm { get; init; } = new();
 
+    /// <summary>What the operator asked for on the two-hand control, and what followed.</summary>
+    public TwoHandControlFindings TwoHandControl { get; init; } = new();
+
+    /// <summary>How the last step ended against how that step usually ends.</summary>
+    public StepStoryFindings StepStory { get; init; } = new();
+
     public bool HasAnything =>
         // Drive faults stand on their own: they come from the drive, not the machine model, so
         // there is something to report even for a machine we have no notes for.
         DriveFaults.Count > 0
         || MotorConfirm.Any
+        || TwoHandControl.Any
+        || StepStory.Any
         || (Knowledge is not null
             && (MatchedFaults.Count > 0 || IssuesSeenInThisLog.Count > 0 || IssueHistoryForSerial.Count > 0
                 || Axes.Count > 0 || PlatePresentEvents.Count > 0 || UnknownFaults.Count > 0
@@ -102,6 +110,11 @@ public static class KnowledgeAnnotator
         var axisHardware = AxisHardware.Read(machineConfigXmlPath ?? string.Empty);
         var motorConfirm = MotorConfirmCheck.Check(machineLog);
 
+        // Both of these read the log's own habits rather than any machine knowledge, so they run
+        // for a machine we have no notes for as well.
+        var twoHand = TwoHandControlCheck.Check(machineLog);
+        var stepStory = StepOutcomeCheck.Check(machineLog);
+
         if (knowledge is null)
         {
             return new KnowledgeFindings
@@ -110,7 +123,9 @@ public static class KnowledgeAnnotator
                 SerialNumber = serialNumber,
                 DriveFaults = driveFaults,
                 AxisHardware = axisHardware,
-                MotorConfirm = motorConfirm
+                MotorConfirm = motorConfirm,
+                TwoHandControl = twoHand,
+                StepStory = stepStory
             };
         }
 
@@ -173,7 +188,9 @@ public static class KnowledgeAnnotator
             HomeInterlock = HomeInterlockCheck.Check(machineLog),
             DriveFaults = driveFaults,
             AxisHardware = axisHardware,
-            MotorConfirm = motorConfirm
+            MotorConfirm = motorConfirm,
+            TwoHandControl = twoHand,
+            StepStory = stepStory
         };
     }
 

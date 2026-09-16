@@ -18,6 +18,7 @@ public static class KnowledgeReportFormatter
         AppendIssues(text, findings);
         AppendPlatePresent(text, findings);
         AppendAxes(text, findings);
+        AppendOperatorSequence(text, knowledge);
         AppendNoise(text, knowledge);
         AppendGaps(text, knowledge);
     }
@@ -194,6 +195,23 @@ public static class KnowledgeReportFormatter
             {
                 text.AppendLine($"  {axis.LogName,-22} not in our notes - new axis tag, worth writing down");
             }
+        }
+    }
+
+    /// <summary>
+    /// How the operator drives this machine. It goes in the report because a technician reading a
+    /// log cold needs to know which press should have done what before the step numbers mean
+    /// anything.
+    /// </summary>
+    private static void AppendOperatorSequence(StringBuilder text, MachineKnowledge knowledge)
+    {
+        if (knowledge.OperatorSequence.Count == 0) return;
+
+        text.AppendLine();
+        text.AppendLine("HOW THIS MACHINE IS DRIVEN");
+        foreach (var line in knowledge.OperatorSequence)
+        {
+            text.AppendLine($"  - {Wrap(line, 4)}");
         }
     }
 

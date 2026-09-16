@@ -36,6 +36,9 @@ public static class SpidaReportFormatter
         AppendOperatorText(text, file);
         if (complaint is not null) AppendComplaint(text, complaint);
         AppendHowItEnded(text, analysis);
+        // What the operator last asked for, and what the machine did about it. This goes high up
+        // because on a hand-driven machine it is usually the answer.
+        if (knowledge is not null) AppendLastOperatorAction(text, knowledge);
         if (knowledge is not null) AppendMotorConfirm(text, knowledge);
         if (knowledge is not null) AppendDriveFaults(text, knowledge);
         AppendUnits(text, analysis);
@@ -180,6 +183,126 @@ public static class SpidaReportFormatter
     /// nothing being wrong.
     /// </para>
     /// </summary>
+
+    /// <summary>
+    /// The last thing the operator asked the machine to do, and what happened next.
+    /// <para>
+    /// Added after a real AOR1694 case where an operator reported a gun firing on its own. The
+    /// report at the time said only that the last log line was an axis disable, which was true and
+    /// useless. The two-hand control and the step the machine was sitting in are what tell the
+    /// story.
+    /// </para>
+    /// </summary>
+    private static void AppendLastOperatorAction(StringBuilder text, KnowledgeFindings knowledge)
+    {
+        var hand = knowledge.TwoHandControl;
+        var story = knowledge.StepStory;
+
+        if (!hand.Any && !story.Any) return;
+
+        text.AppendLine();
+        text.AppendLine("WHAT THE OPERATOR LAST ASKED FOR");
+        text.AppendLine(new string('-', 78));
+
+        if (story.OperatorStoppedFromHmi && story.StoppedAt is { } stoppedAt)
+        {
+            var sure = story.StopConfidence == Confidence.Confirmed ? string.Empty : " (inferred)";
+            text.AppendLine($"  The machine was stopped from the HMI at {stoppedAt:hh\\:mm\\:ss\\.fff}{sure}.");
+            text.AppendLine($"  {story.StepTag} went to 0 part way through a cycle, which is somebody");
+            text.AppendLine("  pressing stop rather than a cycle finishing.");
+
+            if (story.ShutdownCascade.Count > 0)
+            {
+                var span = story.ShutdownCascade[^1].Time - story.ShutdownCascade[0].Time;
+                text.AppendLine($"  The {story.ShutdownCascade.Count} entries in the {span.TotalMilliseconds:0}ms that follow are the machine");
+                text.AppendLine("  shutting down - axes disabling, clamps and supports dropping. They are the");
+                text.AppendLine("  consequence of the stop, not separate faults.");
+            }
+
+            text.AppendLine();
+        }
+
+        if (story.LastWorkingStep is { } step)
+        {
+            text.AppendLine($"  Last working step: {story.StepTag} {step.Step}, reached at {step.FinalReachedAt:hh\\:mm\\:ss\\.fff}.");
+
+            if (step.FinalDifferedFromUsual)
+            {
+                text.AppendLine($"  >>> That step came up {step.Occurrences} times in this log. {step.UsualNextCount} of those went on to");
+                text.AppendLine($"      step {step.UsualNextStep}. This time it went to {step.FinalNextStep}.");
+
+                if (step.FinalDwell is { } finalDwell && step.TypicalDwell is { } typical)
+                {
+                    text.AppendLine($"      It sat there {finalDwell.TotalSeconds:0.#}s, against {typical.TotalSeconds:0.#}s typically.");
+                }
+
+                text.AppendLine("      Whatever that step is waiting for, this is the time it did not get it.");
+            }
+            else if (step.Occurrences > 1 && step.FinalNextStep is not null)
+            {
+                text.AppendLine($"  It behaved as it usually does - on to step {step.FinalNextStep}, same as the other"
+                                + $" {step.Occurrences - 1} time(s).");
+            }
+
+            text.AppendLine();
+        }
+
+        if (hand.Presses.Count > 0 && hand.LastPress is { } last)
+        {
+            var address = hand.Address.Length > 0 ? $" ({hand.Address})" : string.Empty;
+            text.AppendLine($"  Two-hand control {hand.InputTag}{address}: {hand.Presses.Count} press(es) in this log.");
+
+            foreach (var press in hand.Presses.TakeLast(3))
+            {
+                var held = press.Held is { } h ? $"held {h.TotalSeconds:0.00}s" : "still held when the log ended";
+                var marker = ReferenceEquals(press, last) ? "  <-- last" : string.Empty;
+                text.AppendLine($"    {press.PressedAt:hh\\:mm\\:ss\\.fff}  {held}{marker}");
+            }
+
+            if (last.Held is { } lastHeld && hand.MedianHold is { } median
+                && median > TimeSpan.Zero && lastHeld < median / 2)
+            {
+                text.AppendLine($"  The last press was {lastHeld.TotalSeconds:0.00}s against a usual {median.TotalSeconds:0.00}s - a short jab");
+                text.AppendLine("  rather than a held press. Worth asking the operator about.");
+            }
+
+            text.AppendLine();
+        }
+
+        AppendFiringAudit(text, hand);
+    }
+
+    /// <summary>
+    /// What the guns were told to do. Where an operator says a gun went off and nothing commanded
+    /// it, the absence in the log is the finding - a gun that fires with no output asked for is an
+    /// air or valve problem, not a control one.
+    /// </summary>
+    private static void AppendFiringAudit(StringBuilder text, TwoHandControlFindings hand)
+    {
+        if (hand.Firings.Count == 0 && hand.Presses.Count == 0) return;
+
+        if (hand.Firings.Count == 0)
+        {
+            text.AppendLine("  No gun firing was commanded anywhere in this log.");
+            text.AppendLine();
+            return;
+        }
+
+        text.AppendLine($"  Gun firing commanded {hand.Firings.Count} time(s). Last one:");
+        text.AppendLine($"    {hand.Firings[^1].Describe()}");
+
+        if (hand.LastPress is not null && hand.FiringsAfterLastPress.Count == 0)
+        {
+            text.AppendLine();
+            text.AppendLine("  >>> Nothing was commanded to fire after the operator's last press.");
+            text.AppendLine("      If the operator says a gun went off after that, the PLC did not ask");
+            text.AppendLine("      it to - so look at the valve and the air side, not the program.");
+            text.AppendLine("      A gun that fires with no output commanded leaves no trace in this log.");
+        }
+
+        text.AppendLine();
+    }
+
     private static void AppendMotorConfirm(StringBuilder text, KnowledgeFindings knowledge)
     {
         var findings = knowledge.MotorConfirm;

@@ -15,8 +15,8 @@ public static class RakedWallExtruderKnowledge
     public static MachineKnowledge Build() => new()
     {
         Model = "RakingWallExtruderV3DG",
-        AlsoMatches = new[] { "RakingWallExtruder", "RakedWallExtruder" },
-        KnownSerials = new[] { "M19820", "M20822", "M20716" },
+        AlsoMatches = new[] { "RakingWallExtruder", "RakedWallExtruder", "RakingWallExtruderDG" },
+        KnownSerials = new[] { "M19820", "M20822", "M20716", "AOR1694", "M21036", "M21737", "M21844" },
 
         Axes = new AxisRole[]
         {
@@ -172,6 +172,21 @@ public static class RakedWallExtruderKnowledge
             }
         },
 
+        // Confirmed by a technician reading a real AOR1694 export after an operator reported a
+        // gun firing on its own. THNTD is the two-hand no-tie-down control.
+        OperatorSequence = new[]
+        {
+            "The operator drives firing with the THNTD two-hand control, in three presses: "
+                + "clamp the plates, clamp the studs, then fire.",
+            "WallExtruderStep 1310 is the machine waiting for the operator to press THNTD to fire. "
+                + "On a real export it went on to step 1400 five times out of six; the sixth went to "
+                + "step 0 instead.",
+            "WallExtruderStep 0 arriving from a high step is the operator stopping the machine from "
+                + "the HMI. SidePLCStep 0 is a different counter resetting and does not mean that.",
+            "A stop is followed within about 0.2s by axes disabling and clamps, stud pins and plate "
+                + "supports dropping. That cascade is the consequence of the stop, not a fault."
+        },
+
         BackgroundNoise = new[]
         {
             "CIP driver comms timeouts.",
@@ -196,9 +211,16 @@ public static class RakedWallExtruderKnowledge
                 + "two have not been tied together yet.",
             "Which circuits actually keep or lose power and air on an E-Stop.",
             "Whether the overcurrent faults on the three serials share a root cause or are separate problems.",
-            "What the WallExtruderStep numbers mean. A real M20716 export ran 0, 10, 300, 302 then back "
-                + "to 0, which does not line up with the 1-25 operator sequence in the write-up, so the "
-                + "two must not be read as the same numbering."
+            "What most of the WallExtruderStep numbers mean. A real M20716 export ran 0, 10, 300, 302 "
+                + "then back to 0, which does not line up with the 1-25 operator sequence in the write-up, "
+                + "so the two must not be read as the same numbering. Step 1310 and step 0 are now known "
+                + "(see below); the rest are not.",
+            "Whether a short THNTD press behaves differently from a held one. On an AOR1694 export the "
+                + "last press before an incident was 0.14s against a 1.34s usual, and nobody has "
+                + "confirmed whether a jab is enough to advance the sequence.",
+            "Whether a gun can fire pneumatically with no output commanded. The log cannot show it "
+                + "either way, so an operator reporting a firing with no GunFire output in the log is "
+                + "evidence about the air side rather than an absence of evidence."
         }
     };
 }

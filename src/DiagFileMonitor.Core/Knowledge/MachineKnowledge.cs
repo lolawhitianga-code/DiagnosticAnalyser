@@ -83,6 +83,13 @@ public class MachineKnowledge
     public IReadOnlyList<KnownFault> Faults { get; init; } = Array.Empty<KnownFault>();
     public IReadOnlyList<KnownIssue> Issues { get; init; } = Array.Empty<KnownIssue>();
 
+    /// <summary>
+    /// How an operator actually drives this machine, and what the step numbers mean where somebody
+    /// has confirmed them. Printed because a report that knows the sequence can say which press did
+    /// not do what it should have.
+    /// </summary>
+    public IReadOnlyList<string> OperatorSequence { get; init; } = Array.Empty<string>();
+
     /// <summary>Things that turn up every session and are not worth chasing on their own.</summary>
     public IReadOnlyList<string> BackgroundNoise { get; init; } = Array.Empty<string>();
 
