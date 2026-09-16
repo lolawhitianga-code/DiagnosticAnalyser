@@ -746,3 +746,78 @@ public class FaultDeduplicationAcrossBundlesTests
         Assert.Equal("RakingWallExtruderV3DG", file.MachineType);
     }
 }
+
+/// <summary>
+/// Carrying the file list's selection into the report. The rule that matters is that a machine
+/// counts once however many bundles it has sent.
+/// </summary>
+public class SerialScopeTests
+{
+    [Fact]
+    public void SeveralBundlesFromOneMachineAreOneMachine()
+    {
+        // Three bundles from M20716 in the list is still one machine. Listing it three times
+        // would count it three times in every chart and table.
+        var scope = SerialScope.FromSerials(new[] { "M20716", "M20716", "AOR1694", "M20716" });
+
+        Assert.Equal(new[] { "AOR1694", "M20716" }, scope);
+    }
+
+    [Fact]
+    public void BlanksAndWhitespaceAreLeftOut()
+    {
+        // A bundle whose Machine.xml had no serial would otherwise scope the report to "nothing".
+        Assert.Equal(new[] { "M20716" }, SerialScope.FromSerials(new[] { "  M20716 ", "", "   ", null }));
+    }
+
+    [Fact]
+    public void TheSameSerialInDifferentCaseIsTheSameMachine()
+    {
+        Assert.Single(SerialScope.FromSerials(new[] { "m20716", "M20716" }));
+    }
+
+    [Theory]
+    [InlineData("M20716, AOR1694")]
+    [InlineData("M20716,AOR1694")]
+    [InlineData("M20716; AOR1694")]
+    [InlineData(" M20716 \n AOR1694 ")]
+    public void TheScopeBoxTakesCommasSemicolonsOrLines(string typed)
+    {
+        Assert.Equal(new[] { "AOR1694", "M20716" }, SerialScope.Parse(typed));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void AnEmptyScopeMeansEveryMachine(string? typed)
+    {
+        Assert.Empty(SerialScope.Parse(typed));
+    }
+
+    [Fact]
+    public void WhatGoesInTheBoxComesBackOutTheSame()
+    {
+        var typed = SerialScope.Describe(new[] { "M20716", "AOR1694", "M20716" });
+
+        Assert.Equal("AOR1694, M20716", typed);
+        Assert.Equal(new[] { "AOR1694", "M20716" }, SerialScope.Parse(typed));
+    }
+
+    [Fact]
+    public void AScopeFromTheFileListNarrowsTheReport()
+    {
+        // The end of the journey: what was highlighted actually filters the bundles read.
+        var request = new FleetScanRequest { Serials = SerialScope.Parse("M20716, AOR1694").ToArray() };
+
+        Assert.True(request.Includes(new DiagnosticFile
+        {
+            SerialNumber = "M20716", ArrivedAtUtc = DateTime.UtcNow, Status = ProcessingStatus.Processed
+        }));
+
+        Assert.False(request.Includes(new DiagnosticFile
+        {
+            SerialNumber = "M21737", ArrivedAtUtc = DateTime.UtcNow, Status = ProcessingStatus.Processed
+        }));
+    }
+}

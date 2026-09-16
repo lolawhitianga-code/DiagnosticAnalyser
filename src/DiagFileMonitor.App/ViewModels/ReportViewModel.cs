@@ -60,10 +60,15 @@ public partial class ReportViewModel : ObservableObject
     public bool IsChangeCase => KindIndex == 1;
     public bool HasCreatedReport => CreatedPath.Length > 0;
 
-    public ReportViewModel(ReportService reportService, string outputFolder)
+    public ReportViewModel(ReportService reportService, string outputFolder,
+        IReadOnlyList<string>? serials = null)
     {
         _reportService = reportService;
         _outputFolder = outputFolder;
+
+        // Opened from a selection in the file list, so the machines are already chosen. Left empty
+        // the report covers every machine, which is still what happens when nothing was selected.
+        if (serials is { Count: > 0 }) Serials = SerialScope.Describe(serials);
     }
 
     partial void OnKindIndexChanged(int value) => OnPropertyChanged(nameof(IsChangeCase));
@@ -153,7 +158,7 @@ public partial class ReportViewModel : ObservableObject
             Scope = new FleetScanRequest
             {
                 FromUtc = days > 0 ? DateTime.UtcNow.Date.AddDays(-days) : null,
-                Serials = Split(Serials),
+                Serials = SerialScope.Parse(Serials).ToArray(),
                 MachineTypes = Split(MachineTypes),
                 Kinds = SelectedKinds()
             },

@@ -48,10 +48,14 @@ public partial class ProductionReportViewModel : ObservableObject
 
     public bool HasCreatedReport => CreatedPath.Length > 0;
 
-    public ProductionReportViewModel(ProductionImportService import, string outputFolder)
+    public ProductionReportViewModel(ProductionImportService import, string outputFolder,
+        IReadOnlyList<string>? serials = null)
     {
         _import = import;
         _outputFolder = outputFolder;
+
+        // A production report is for one machine at a time, so only the first carries over.
+        if (serials is { Count: > 0 }) SerialNumber = serials[0];
     }
 
     partial void OnCreatedPathChanged(string value)

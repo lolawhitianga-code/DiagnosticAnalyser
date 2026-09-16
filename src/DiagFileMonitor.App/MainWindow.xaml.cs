@@ -51,7 +51,8 @@ public partial class MainWindow : Window
         new ReportWindow
         {
             Owner = this,
-            DataContext = new ViewModels.ReportViewModel(viewModel.ReportService, request.OutputFolder)
+            DataContext = new ViewModels.ReportViewModel(
+                viewModel.ReportService, request.OutputFolder, request.Serials)
         }.Show();
     }
 
@@ -63,7 +64,7 @@ public partial class MainWindow : Window
         {
             Owner = this,
             DataContext = new ViewModels.ProductionReportViewModel(
-                viewModel.ProductionImportService, request.OutputFolder)
+                viewModel.ProductionImportService, request.OutputFolder, request.Serials)
         };
 
         window.Show();

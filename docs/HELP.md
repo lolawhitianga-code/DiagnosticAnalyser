@@ -190,6 +190,12 @@ Needs a benchmark set first - right-click a known-good bundle from the same mach
 Builds an HTML report from the stored bundles: every fault occurrence across the fleet, or the case
 for a design change. See the **Reports** section below.
 
+Whatever is highlighted in the list carries across, so the serial is already filled in when the
+window opens. Highlight several rows and all their machines carry across, which is how a comparison
+gets set up. Several bundles from the same machine count once.
+
+With nothing selected the report covers every machine, which is what it has always done.
+
 <!--help:main.production-->
 ### Production
 
@@ -241,6 +247,14 @@ the benchmark master is the single one Compare uses.
 ### Show all machines (right-click)
 
 Undoes **Show this machine's history** and puts every bundle back in the list.
+
+<!--help:main.reportonmachine-->
+### Report on this machine (right-click)
+
+Opens the report builder with this machine's serial already in the scope box.
+
+Right-clicking a row that is part of a larger selection carries the whole selection across, for
+comparing machines against each other. Right-clicking anywhere else takes just that row.
 
 <!--help:main.machinehistory-->
 ### Show this machine's history (right-click)
@@ -339,6 +353,9 @@ read as an all-time total.
 
 Leave both empty for every machine with a stored bundle. Separate several with commas.
 
+Opened from the file list, this is already filled in with whatever was highlighted. Change it
+freely - it is only a starting point.
+
 Every machine in scope appears in every chart and table, including ones with nothing recorded - a
 zero is a finding, and a machine quietly dropped is not a comparison.
 
@@ -381,7 +398,8 @@ unplugged.
 
 ProdLogV2 files carry no machine identity at all - not in the file, not in the file name, not in
 the content. So the serial has to come from somewhere else: **Browse...** reads it out of the
-folder name where there is one, otherwise type it.
+folder name where there is one, opening this window from a highlighted row carries that row's
+serial across, and otherwise type it.
 
 It is what the stored weeks are filed under, so getting it wrong files one machine's production
 against another.

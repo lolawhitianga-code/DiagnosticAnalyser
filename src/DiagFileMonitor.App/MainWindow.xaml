@@ -282,6 +282,9 @@
                                 <MenuItem Header="Mark / unmark as known-good _baseline" help:Help.Topic="main.markbaseline"
                                           Command="{Binding PlacementTarget.Tag.ToggleBaselineCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding}" />
+                                <MenuItem Header="_Report on this machine" help:Help.Topic="main.reportonmachine"
+                                          Command="{Binding PlacementTarget.Tag.ReportOnMachineCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding}" />
                                 <MenuItem Header="Show this machine's _history" help:Help.Topic="main.machinehistory"
                                           Command="{Binding PlacementTarget.Tag.ShowMachineHistoryCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding}" />

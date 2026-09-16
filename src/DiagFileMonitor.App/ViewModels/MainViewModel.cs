@@ -260,17 +260,61 @@ public partial class MainViewModel : ObservableObject
 
     public record FeedbackRequest(DiagnosticFileSummary File, string ReportText, string OutputFolder);
 
-    public record ReportRequestArgs(string OutputFolder);
+    /// <summary>
+    /// <paramref name="Serials"/> is what the report opens scoped to. Empty means every machine.
+    /// </summary>
+    public record ReportRequestArgs(string OutputFolder, IReadOnlyList<string> Serials);
 
     /// <summary>
-    /// Opens the report builder. It reads the stored bundles rather than the current selection,
-    /// so it does not need one - scope is chosen in the window.
+    /// Opens the report builder, scoped to whatever machines are highlighted.
+    /// <para>
+    /// It still works with nothing selected - the scope is just left open - but carrying the
+    /// selection across saves typing a serial that is already on screen, and several rows is how
+    /// a comparison gets set up.
+    /// </para>
     /// </summary>
     [RelayCommand]
-    private void BuildReport()
+    private void BuildReport() => OpenReportFor(SelectedSerials());
+
+    /// <summary>Report on one machine, from the right-click menu.</summary>
+    [RelayCommand]
+    private void ReportOnMachine(DiagnosticFileSummary? row)
     {
-        ReportRequested?.Invoke(this, new ReportRequestArgs(ReportsFolder));
-        StatusMessage = "Choose what the report should cover, then build it.";
+        // Right-clicking a row inside a multiple selection means the whole selection; right
+        // clicking somewhere else means just that row.
+        var selected = SelectedSerials();
+        var serial = (row?.SerialNumber ?? string.Empty).Trim();
+
+        var serials = serial.Length > 0 && !selected.Contains(serial, StringComparer.OrdinalIgnoreCase)
+            ? new List<string> { serial }
+            : selected;
+
+        OpenReportFor(serials);
+    }
+
+    private void OpenReportFor(IReadOnlyList<string> serials)
+    {
+        ReportRequested?.Invoke(this, new ReportRequestArgs(ReportsFolder, serials));
+
+        StatusMessage = serials.Count switch
+        {
+            0 => "Choose what the report should cover, then build it.",
+            1 => $"Report scoped to {serials[0]}. Change the scope if you want more.",
+            _ => $"Report scoped to {serials.Count} machines: {string.Join(", ", serials)}."
+        };
+    }
+
+    /// <summary>
+    /// The machines highlighted in the list, each once. Several bundles from one machine is one
+    /// machine, not several - otherwise a report would list the same serial three times.
+    /// </summary>
+    private List<string> SelectedSerials()
+    {
+        var rows = SelectedFiles.Count > 0
+            ? SelectedFiles
+            : SelectedFile is null ? new List<DiagnosticFileSummary>() : new List<DiagnosticFileSummary> { SelectedFile };
+
+        return SerialScope.FromSerials(rows.Select(r => r.SerialNumber)).ToList();
     }
 
     /// <summary>
@@ -280,7 +324,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void BuildProductionReport()
     {
-        ProductionReportRequested?.Invoke(this, new ReportRequestArgs(ReportsFolder));
+        ProductionReportRequested?.Invoke(this, new ReportRequestArgs(ReportsFolder, SelectedSerials()));
         StatusMessage = "Import the machine's ProdLogV2 logs, then build the report.";
     }
 
