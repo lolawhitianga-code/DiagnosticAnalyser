@@ -592,8 +592,9 @@ Stepping to a change outside the filter clears it rather than refusing to move.
 Every output this log ever moves, in name order so rows stay put as you step through time. On rows
 are shaded.
 
-**Held** is when it last changed. **Moves** is how many times it changes in the whole file - an
-output that moves once and an output that moves nine hundred times are different animals.
+**Held** is when it last changed. **Moves** is how many times it has changed by the moment you are
+looking at - a clamp on its fortieth move of the shift is a different story from one on its first.
+**In file** is the total for the whole log, there for scale.
 
 A point is listed by name **and** address because neither is unique. The same name can be two
 coils, one per side of the machine, and the same address can carry two named points. Where that

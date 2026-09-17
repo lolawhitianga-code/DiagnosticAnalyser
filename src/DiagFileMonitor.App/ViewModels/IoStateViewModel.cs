@@ -15,9 +15,14 @@ public record LogLineRow(int LineNumber, string Time, string Category, string Ta
 }
 
 /// <summary>One I/O point and what it was doing at the chosen moment.</summary>
-public record SignalRow(string Name, string Address, string State, string Since, int Changes,
-    bool On, bool ReadBackwards)
+public record SignalRow(string Name, string Address, string State, string Since,
+    int Moves, int MovesInFile, bool On, bool ReadBackwards)
 {
+    /// <summary>
+    /// <see cref="Moves"/> is how often the point has moved by the moment being looked at, which
+    /// is the useful half - a clamp on its fortieth move of the shift is a different story from
+    /// one on its first. <see cref="MovesInFile"/> is the whole file, for scale.
+    /// </summary>
     public string Note => ReadBackwards
         ? "nothing had touched it yet - read backwards from its next change"
         : string.Empty;
@@ -256,7 +261,8 @@ public partial class IoStateViewModel : ObservableObject
             sb.AppendLine(title);
 
             foreach (var row in rows)
-                sb.AppendLine($"  {row.State,-3} {row.Name,-32} {row.Address,-22} {row.Since}"
+                sb.AppendLine($"  {row.State,-3} {row.Name,-32} {row.Address,-22} {row.Since,-30} "
+                              + $"{row.Moves:N0} move(s) so far, {row.MovesInFile:N0} in the file"
                               + (row.ReadBackwards ? "  (read backwards)" : string.Empty));
 
             sb.AppendLine();
@@ -326,8 +332,8 @@ public partial class IoStateViewModel : ObservableObject
         // Name order, always. Sorting by state would make rows jump about as you step through the
         // log, which is the one thing that makes a list like this unreadable.
         .Where(s => !OnlyWhatIsOn || s.On)
-        .Select(s => new SignalRow(s.Id.Name, s.Id.Address, s.OnOff, s.Held, s.ChangesTotal,
-            s.On, s.Source != StateSource.Measured))
+        .Select(s => new SignalRow(s.Id.Name, s.Id.Address, s.OnOff, s.Held,
+            s.ChangesBefore, s.ChangesTotal, s.On, s.Source != StateSource.Measured))
         .ToList();
 
     private string BuildNotes()

@@ -201,6 +201,39 @@ public class IoTimelineTests
     }
 
     [Fact]
+    public void CountsMovesSoFarSeparatelyFromMovesInTheWholeFile()
+    {
+        // How often a point has cycled by the moment you are looking at is the useful half: a
+        // clamp on its fortieth move of the shift is a different story from one on its first.
+        var timeline = Build(
+            "08:00:00.0000000,  OutputChange, Clamp,  Output (A) Set On",
+            "08:00:01.0000000,  OutputChange, Clamp,  Output (A) Set Off",
+            "08:00:02.0000000,  Other, Step,  Step = 10",
+            "08:00:03.0000000,  OutputChange, Clamp,  Output (A) Set On",
+            "08:00:04.0000000,  OutputChange, Clamp,  Output (A) Set Off");
+
+        Assert.Equal(2, Find(timeline.AtLine(3).Outputs, "Clamp").ChangesBefore);
+        Assert.Equal(4, Find(timeline.AtLine(3).Outputs, "Clamp").ChangesTotal);
+
+        // The change on the chosen line counts, the same way its state does.
+        Assert.Equal(3, Find(timeline.AtLine(4).Outputs, "Clamp").ChangesBefore);
+        Assert.Equal(4, Find(timeline.AtLine(5).Outputs, "Clamp").ChangesBefore);
+    }
+
+    [Fact]
+    public void APointNotYetTouchedHasMovedNoTimesSoFar()
+    {
+        var state = Find(Build(
+            "08:00:00.0000000,  Other, Step,  Step = 10",
+            "08:00:01.0000000,  OutputChange, Clamp,  Output (A) Set Off",
+            "08:00:02.0000000,  OutputChange, Clamp,  Output (A) Set On").AtLine(1).Outputs, "Clamp");
+
+        Assert.Equal(0, state.ChangesBefore);
+        Assert.Equal(2, state.ChangesTotal);
+        Assert.True(state.On);
+    }
+
+    [Fact]
     public void AnEmptyLogDoesNotThrow()
     {
         var snapshot = Build().AtLine(1);

@@ -8,6 +8,14 @@
         WindowStartupLocation="CenterOwner">
 
     <Window.Resources>
+        <Style x:Key="NumberCell" TargetType="TextBlock">
+            <Setter Property="HorizontalAlignment" Value="Right" />
+        </Style>
+
+        <Style x:Key="QuietNumberCell" TargetType="TextBlock" BasedOn="{StaticResource NumberCell}">
+            <Setter Property="Foreground" Value="{StaticResource BrandGrey}" />
+        </Style>
+
         <Style x:Key="SignalGrid" TargetType="DataGrid">
             <Setter Property="AutoGenerateColumns" Value="False" />
             <Setter Property="IsReadOnly" Value="True" />
@@ -149,7 +157,10 @@
                             <DataGridTextColumn Header="Output" Binding="{Binding Name}" Width="2*" />
                             <DataGridTextColumn Header="Address" Binding="{Binding Address}" Width="150" />
                             <DataGridTextColumn Header="Held" Binding="{Binding Since}" Width="170" />
-                            <DataGridTextColumn Header="Moves" Binding="{Binding Changes}" Width="60" />
+                            <DataGridTextColumn Header="Moves" Binding="{Binding Moves}" Width="62"
+                                                ElementStyle="{StaticResource NumberCell}" />
+                            <DataGridTextColumn Header="In file" Binding="{Binding MovesInFile}" Width="62"
+                                                ElementStyle="{StaticResource QuietNumberCell}" />
                             <DataGridTextColumn Header="Note" Binding="{Binding Note}" Width="*" />
                         </DataGrid.Columns>
                     </DataGrid>
@@ -168,7 +179,10 @@
                             <DataGridTextColumn Header="Input" Binding="{Binding Name}" Width="2*" />
                             <DataGridTextColumn Header="Address" Binding="{Binding Address}" Width="150" />
                             <DataGridTextColumn Header="Held" Binding="{Binding Since}" Width="170" />
-                            <DataGridTextColumn Header="Moves" Binding="{Binding Changes}" Width="60" />
+                            <DataGridTextColumn Header="Moves" Binding="{Binding Moves}" Width="62"
+                                                ElementStyle="{StaticResource NumberCell}" />
+                            <DataGridTextColumn Header="In file" Binding="{Binding MovesInFile}" Width="62"
+                                                ElementStyle="{StaticResource QuietNumberCell}" />
                             <DataGridTextColumn Header="Note" Binding="{Binding Note}" Width="*" />
                         </DataGrid.Columns>
                     </DataGrid>
