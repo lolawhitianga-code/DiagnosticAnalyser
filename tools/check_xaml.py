@@ -136,6 +136,69 @@ def check_command_guards():
     return problems
 
 
+# Types that exist in BOTH System.Windows (WPF) and System.Windows.Forms, which this project
+# builds with together. Used unqualified, they do not compile - and WPF will not build on Linux,
+# so nothing here catches it until somebody runs the Windows build.
+#
+# This list is the scar tissue from three separate broken builds: KeyEventArgs / Cursor / Color /
+# Brush, then Cursor again, then DragEventArgs / DataFormats / DragDropEffects.
+AMBIGUOUS_WPF_WINFORMS = [
+    "DragEventArgs", "DragDropEffects", "DataFormats", "DataObject",
+    "KeyEventArgs", "MouseEventArgs", "KeyboardDevice",
+    "Cursor", "Cursors", "Color", "Colors", "Brush", "Brushes", "Pen",
+    "Clipboard", "MessageBox", "Application", "Control", "Label", "Button",
+    "TextBox", "CheckBox", "ComboBox", "ListBox", "MenuItem", "ContextMenu",
+    "Orientation", "HorizontalAlignment", "VerticalAlignment", "Size", "Point",
+    "FontFamily", "FontStyle", "FontWeight", "Image", "Padding", "Binding",
+]
+
+
+def check_ambiguous_types():
+    """
+    A type that exists in both WPF and WinForms, written without its namespace, in any file the
+    App project compiles.
+
+    This project sets UseWPF, UseWindowsForms and ImplicitUsings all together, so every file has
+    both System.Windows and System.Windows.Forms in scope and a bare shared name does not compile.
+    The Linux stand-in type-checks ViewModels only - code-behind needs the XAML-generated partial
+    that only a Windows build produces - so an ambiguous type in a .xaml.cs is never seen here at
+    all. Cheap text rule, three real broken builds behind it.
+
+    Only actual type usage counts. "FontWeight = FontWeights.SemiBold" is assigning a property
+    that happens to share the name, and it compiles perfectly well.
+    """
+    problems = []
+    names = "|".join(AMBIGUOUS_WPF_WINFORMS)
+
+    # Used as a type: declaring something of it, reading a static off it, or newing it up.
+    declaration = re.compile(r"(?<![\w.])(" + names + r")\s+[A-Za-z_]\w*")
+    static_use = re.compile(r"(?<![\w.])(" + names + r")\s*\.")
+    constructed = re.compile(r"\bnew\s+(" + names + r")\s*[({]")
+
+    for source in sorted(APP.rglob("*.cs")):
+        if "obj" in source.parts or "bin" in source.parts:
+            continue
+
+        for number, line in enumerate(source.read_text().splitlines(), 1):
+            stripped = line.strip()
+
+            if stripped.startswith(("//", "///", "*", "using ")):
+                continue
+
+            # Strip string literals so a word in a message does not trip the rule.
+            code = re.sub(r'"(?:[^"\\]|\\.)*"', '""', line)
+
+            hits = {m.group(1) for pattern in (declaration, static_use, constructed)
+                    for m in pattern.finditer(code)}
+
+            for name in sorted(hits):
+                problems.append(
+                    f"{source.name}:{number}: '{name}' exists in both System.Windows and "
+                    f"System.Windows.Forms - write it out in full or the Windows build fails")
+
+    return problems
+
+
 def dump_properties():
     ensure_dumpprops_built()
 
@@ -180,7 +243,7 @@ def main():
     for type_name, names in props.items():
         known.update(names)
 
-    problems_at_start = []
+    problems_at_start = check_ambiguous_types()
     problems = []
     checked = 0
 

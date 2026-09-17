@@ -49,20 +49,29 @@ public partial class MainWindow : Window
     /// <summary>
     /// Dropping bundles on the window imports them. The shortest path there is: no folder to find,
     /// nothing to copy, no waiting for the watcher.
+    /// <para>
+    /// Every drag-and-drop type here is written out in full. This project builds with both WPF and
+    /// WinForms switched on, and DragEventArgs, DataFormats and DragDropEffects each exist in both
+    /// - so an unqualified one does not compile. It is not fussiness; it is the third time this
+    /// has broken a build.
+    /// </para>
     /// </summary>
-    private async void Window_Drop(object sender, DragEventArgs e)
+    private async void Window_Drop(object sender, System.Windows.DragEventArgs e)
     {
         if (DataContext is not ViewModels.MainViewModel viewModel) return;
-        if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths) return;
+        if (e.Data.GetData(System.Windows.DataFormats.FileDrop) is not string[] paths) return;
 
         e.Handled = true;
         await viewModel.ImportPathsAsync(paths);
     }
 
-    private void Window_DragOver(object sender, DragEventArgs e)
+    private void Window_DragOver(object sender, System.Windows.DragEventArgs e)
     {
         // Say up front whether the drop will do anything, rather than swallowing it silently.
-        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Effects = e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop)
+            ? System.Windows.DragDropEffects.Copy
+            : System.Windows.DragDropEffects.None;
+
         e.Handled = true;
     }
 
