@@ -1,0 +1,179 @@
+<Window x:Class="DiagFileMonitor.App.IoStateWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:help="clr-namespace:DiagFileMonitor.App.Help"
+        Title="Inputs and outputs at a moment" Height="740" Width="1280"
+        MinHeight="480" MinWidth="900"
+        Background="{StaticResource AppBackground}"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Resources>
+        <Style x:Key="SignalGrid" TargetType="DataGrid">
+            <Setter Property="AutoGenerateColumns" Value="False" />
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="CanUserAddRows" Value="False" />
+            <Setter Property="GridLinesVisibility" Value="Horizontal" />
+            <Setter Property="HeadersVisibility" Value="Column" />
+            <Setter Property="RowStyle">
+                <Setter.Value>
+                    <Style TargetType="DataGridRow">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding On}" Value="True">
+                                <Setter Property="Background" Value="{StaticResource BrandBlueTint}" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding ReadBackwards}" Value="True">
+                                <Setter Property="FontStyle" Value="Italic" />
+                                <Setter Property="Foreground" Value="{StaticResource BrandGrey}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel Margin="10">
+        <Button DockPanel.Dock="Top" x:Name="HelpModeButton" Style="{StaticResource HelpButton}"
+                HorizontalAlignment="Right" Margin="0,0,0,4" />
+
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+            <TextBlock Text="{Binding Heading}" Style="{StaticResource SectionHeading}" TextWrapping="Wrap" />
+
+            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                <Button Content="Open a log..." help:Help.Topic="iostate.browse" Command="{Binding BrowseCommand}"
+                        Width="110" Margin="0,0,16,0" />
+
+                <TextBlock Text="Moment:" help:Help.Topic="iostate.moment" Style="{StaticResource FieldLabel}"
+                           Margin="0,0,8,0" />
+                <TextBox Text="{Binding MomentText, UpdateSourceTrigger=PropertyChanged}"
+                         help:Help.Topic="iostate.moment" Width="150" Margin="0,0,6,0">
+                    <TextBox.InputBindings>
+                        <KeyBinding Key="Return" Command="{Binding GoToTimeCommand}" />
+                    </TextBox.InputBindings>
+                </TextBox>
+                <Button Content="Go" help:Help.Topic="iostate.moment" Command="{Binding GoToTimeCommand}"
+                        Width="50" Margin="0,0,16,0" Style="{StaticResource PrimaryButton}" />
+
+                <Button Content="|&lt;" help:Help.Topic="iostate.step" Command="{Binding GoToStartCommand}"
+                        Width="34" Margin="0,0,4,0" ToolTip="First line" />
+                <Button Content="&lt; Change" help:Help.Topic="iostate.step" Command="{Binding PreviousChangeCommand}"
+                        Width="80" Margin="0,0,4,0" ToolTip="Previous input or output change" />
+                <Button Content="Change &gt;" help:Help.Topic="iostate.step" Command="{Binding NextChangeCommand}"
+                        Width="80" Margin="0,0,4,0" ToolTip="Next input or output change" />
+                <Button Content="&gt;|" help:Help.Topic="iostate.step" Command="{Binding GoToEndCommand}"
+                        Width="34" Margin="0,0,16,0" ToolTip="Last line" />
+
+                <CheckBox Content="Only show what is on" help:Help.Topic="iostate.onlyon"
+                          IsChecked="{Binding OnlyWhatIsOn}" VerticalAlignment="Center" Margin="0,0,16,0" />
+
+                <Button Content="Copy for ticket" help:Help.Topic="iostate.copy" Command="{Binding CopyCommand}"
+                        Width="110" />
+            </StackPanel>
+        </StackPanel>
+
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+            <TextBlock Text="{Binding Summary}" Foreground="{StaticResource BrandNavy}" FontWeight="SemiBold"
+                       TextWrapping="Wrap" />
+            <TextBlock Text="{Binding Notes}" Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="0,4,0,0" />
+            <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource BrandBlueDark}"
+                       TextWrapping="Wrap" Margin="0,4,0,0" />
+        </StackPanel>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="5*" MinWidth="320" />
+                <ColumnDefinition Width="6" />
+                <ColumnDefinition Width="6*" MinWidth="360" />
+            </Grid.ColumnDefinitions>
+
+            <DockPanel Grid.Column="0">
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                    <TextBlock Text="Log line:" help:Help.Topic="iostate.lines" Style="{StaticResource FieldLabel}"
+                               Margin="0,0,8,0" />
+                    <TextBox Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
+                             help:Help.Topic="iostate.filter" Width="160" Margin="0,0,6,0">
+                        <TextBox.InputBindings>
+                            <KeyBinding Key="Return" Command="{Binding ApplyFilterCommand}" />
+                        </TextBox.InputBindings>
+                    </TextBox>
+                    <Button Content="Filter" help:Help.Topic="iostate.filter" Command="{Binding ApplyFilterCommand}"
+                            Width="60" Margin="0,0,4,0" />
+                    <Button Content="Clear" help:Help.Topic="iostate.filter" Command="{Binding ClearFilterCommand}"
+                            Width="60" />
+                </StackPanel>
+
+                <DataGrid ItemsSource="{Binding Lines}" SelectedItem="{Binding SelectedLine}"
+                          help:Help.Topic="iostate.lines"
+                          AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                          GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                          EnableRowVirtualization="True" VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          SelectionChanged="Lines_SelectionChanged">
+                    <DataGrid.RowStyle>
+                        <Style TargetType="DataGridRow">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsChange}" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource BrandBlueDark}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.RowStyle>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Line" Binding="{Binding LineNumber}" Width="62" />
+                        <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="102" />
+                        <DataGridTextColumn Header="Kind" Binding="{Binding Category}" Width="92" />
+                        <DataGridTextColumn Header="Tag" Binding="{Binding Tag}" Width="150" />
+                        <DataGridTextColumn Header="Detail" Binding="{Binding Description}" Width="*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+
+            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"
+                          Background="{StaticResource BorderSoft}" />
+
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="6" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <DockPanel Grid.Row="0">
+                    <TextBlock DockPanel.Dock="Top" Text="Outputs" help:Help.Topic="iostate.outputs"
+                               Style="{StaticResource SectionHeading}" Margin="0,0,0,4" />
+                    <DataGrid ItemsSource="{Binding Outputs}" Style="{StaticResource SignalGrid}"
+                              help:Help.Topic="iostate.outputs">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="State" Binding="{Binding State}" Width="54" />
+                            <DataGridTextColumn Header="Output" Binding="{Binding Name}" Width="2*" />
+                            <DataGridTextColumn Header="Address" Binding="{Binding Address}" Width="150" />
+                            <DataGridTextColumn Header="Held" Binding="{Binding Since}" Width="170" />
+                            <DataGridTextColumn Header="Moves" Binding="{Binding Changes}" Width="60" />
+                            <DataGridTextColumn Header="Note" Binding="{Binding Note}" Width="*" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+
+                <GridSplitter Grid.Row="1" Height="6" HorizontalAlignment="Stretch"
+                              Background="{StaticResource BorderSoft}" />
+
+                <DockPanel Grid.Row="2">
+                    <TextBlock DockPanel.Dock="Top" Text="Inputs" help:Help.Topic="iostate.inputs"
+                               Style="{StaticResource SectionHeading}" Margin="0,0,0,4" />
+                    <DataGrid ItemsSource="{Binding Inputs}" Style="{StaticResource SignalGrid}"
+                              help:Help.Topic="iostate.inputs">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="State" Binding="{Binding State}" Width="54" />
+                            <DataGridTextColumn Header="Input" Binding="{Binding Name}" Width="2*" />
+                            <DataGridTextColumn Header="Address" Binding="{Binding Address}" Width="150" />
+                            <DataGridTextColumn Header="Held" Binding="{Binding Since}" Width="170" />
+                            <DataGridTextColumn Header="Moves" Binding="{Binding Changes}" Width="60" />
+                            <DataGridTextColumn Header="Note" Binding="{Binding Note}" Width="*" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </Grid>
+        </Grid>
+    </DockPanel>
+</Window>

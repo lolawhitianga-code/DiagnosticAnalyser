@@ -16,6 +16,7 @@ public sealed class TestEnvironment : IDisposable
 
     /// <summary>Reads the production data a bundle carries, filed under the bundle's own serial.</summary>
     public ProductionImportService Production { get; }
+    public SignalCatalogueService Signals { get; }
 
     private readonly string _databasePath;
 
@@ -35,7 +36,8 @@ public sealed class TestEnvironment : IDisposable
 
         Repository = new DiagFileRepository(CreateContext);
         Production = new ProductionImportService(CreateContext);
-        Processor = new DiagFileProcessor(ExtractPath, Repository, true, Production);
+        Signals = new SignalCatalogueService(CreateContext);
+        Processor = new DiagFileProcessor(ExtractPath, Repository, true, Production, Signals);
     }
 
     public DiagDbContext CreateContext()

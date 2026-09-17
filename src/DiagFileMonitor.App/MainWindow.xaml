@@ -191,8 +191,10 @@
                         IsEnabled="{Binding SelectedFile.HasErrorLog, FallbackValue=False}" />
                 <Button Content="machinelog.txt" help:Help.Topic="main.openlogs" Command="{Binding OpenMachineLogCommand}" Width="110" Margin="0,0,6,0"
                         IsEnabled="{Binding SelectedFile.HasMachineLog, FallbackValue=False}" />
-                <Button Content="changelog.txt" help:Help.Topic="main.openlogs" Command="{Binding OpenChangeLogCommand}" Width="105"
+                <Button Content="changelog.txt" help:Help.Topic="main.openlogs" Command="{Binding OpenChangeLogCommand}" Width="105" Margin="0,0,12,0"
                         IsEnabled="{Binding SelectedFile.HasChangeLog, FallbackValue=False}" />
+                <Button Content="I/O at a moment" help:Help.Topic="main.iostate" Command="{Binding ShowIoStateCommand}" Width="115"
+                        IsEnabled="{Binding SelectedFile.HasMachineLog, FallbackValue=False}" />
             </StackPanel>
             <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource BrandNavy}" />
         </StackPanel>
@@ -304,6 +306,11 @@
                                           Command="{Binding PlacementTarget.Tag.OpenChangeLogCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding}"
                                           IsEnabled="{Binding HasChangeLog}" />
+                                <Separator />
+                                <MenuItem Header="_Inputs and outputs at a moment..." help:Help.Topic="main.iostate"
+                                          Command="{Binding PlacementTarget.Tag.ShowIoStateCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding}"
+                                          IsEnabled="{Binding HasMachineLog}" />
                             </ContextMenu>
                         </Setter.Value>
                     </Setter>

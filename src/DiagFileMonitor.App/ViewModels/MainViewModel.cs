@@ -35,6 +35,9 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>Reads and stores ProdLogV2 production logs.</summary>
     public ProductionImportService ProductionImportService { get; }
+
+    /// <summary>What every machine's logs have taught us about its inputs and outputs.</summary>
+    public SignalCatalogueService SignalCatalogue { get; }
     private readonly int _repeatWindowDays;
 
     /// <summary>Company logo, if one was dropped next to the exe. Null shows the text wordmark instead.</summary>
@@ -255,6 +258,7 @@ public partial class MainViewModel : ObservableObject
     public event EventHandler<FeedbackRequest>? FeedbackRequested;
     public event EventHandler<ReportRequestArgs>? ReportRequested;
     public event EventHandler<ReportRequestArgs>? ProductionReportRequested;
+    public event EventHandler<IoStateRequestArgs>? IoStateRequested;
 
     public record AnalysisResult(string Heading, string ReportText);
 
@@ -264,6 +268,8 @@ public partial class MainViewModel : ObservableObject
     /// <paramref name="Serials"/> is what the report opens scoped to. Empty means every machine.
     /// </summary>
     public record ReportRequestArgs(string OutputFolder, IReadOnlyList<string> Serials);
+
+    public record IoStateRequestArgs(string? MachineLogPath, string Heading, string SerialNumber);
 
     /// <summary>
     /// Opens the report builder, scoped to whatever machines are highlighted.
@@ -565,7 +571,8 @@ public partial class MainViewModel : ObservableObject
     public MainViewModel(SettingsService settingsService, DiagFileRepository repository,
         FolderMonitorService monitorService, TrayNotifier notifier, ExtractCleanupService cleanupService,
         DatabaseResetService resetService, DiagnosticAnalysisService analysisService,
-        DiagnosticComparisonService comparisonService, BurstAlertService? alertService = null)
+        DiagnosticComparisonService comparisonService, BurstAlertService? alertService = null,
+        SignalCatalogueService? signalCatalogue = null)
     {
         _settingsService = settingsService;
         _repository = repository;
@@ -579,6 +586,7 @@ public partial class MainViewModel : ObservableObject
         FeedbackPackageService = new FeedbackPackageService(repository, analysisService);
         ReportService = new ReportService(repository);
         ProductionImportService = new ProductionImportService(repository.ContextFactory);
+        SignalCatalogue = signalCatalogue ?? new SignalCatalogueService(repository.ContextFactory);
 
         FilesView = CollectionViewSource.GetDefaultView(Files);
         FilesView.Filter = o => o is DiagnosticFileSummary row && DiagnosticFileFilter.Matches(row, CurrentCriteria());
@@ -726,6 +734,30 @@ public partial class MainViewModel : ObservableObject
 
     [RelayCommand]
     private void OpenMachineLog(DiagnosticFileSummary? row) => OpenLog((row ?? SelectedFile)?.MachineLogPath, "machinelog.txt");
+
+    /// <summary>
+    /// Opens the machine log at a moment, so you can see what every input and output was doing.
+    /// Reading a log line by line tells you what changed; it does not tell you what was already
+    /// held on, which is usually the thing that explains the fault.
+    /// </summary>
+    [RelayCommand]
+    private void ShowIoState(DiagnosticFileSummary? row)
+    {
+        var file = row ?? SelectedFile;
+        var path = file?.MachineLogPath;
+
+        if (path is null || !File.Exists(path))
+        {
+            StatusMessage = "This bundle has no machinelog.txt to read I/O out of.";
+            return;
+        }
+
+        var heading = string.Join(" - ", new[] { file?.SerialNumber, file?.MachineName }
+            .Where(part => part is { Length: > 0 } && part != DiagnosticFileSummary.Unknown));
+
+        IoStateRequested?.Invoke(this, new IoStateRequestArgs(path, heading, file?.SerialNumber ?? string.Empty));
+        StatusMessage = "Pick a line, or type a time, to see what was on at that moment.";
+    }
 
     [RelayCommand]
     private void OpenErrorLog(DiagnosticFileSummary? row) => OpenLog((row ?? SelectedFile)?.ErrorLogPath, "errorlog.txt");

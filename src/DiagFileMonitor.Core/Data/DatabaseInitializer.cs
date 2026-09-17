@@ -36,6 +36,24 @@ public static class DatabaseInitializer
     /// </summary>
     private static readonly (string Table, string Sql)[] ExpectedTables =
     {
+        ("MachineSignals", """
+            CREATE TABLE IF NOT EXISTS "MachineSignals" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_MachineSignals" PRIMARY KEY AUTOINCREMENT,
+                "SerialNumber" TEXT NOT NULL,
+                "MachineType" TEXT NOT NULL,
+                "Kind" TEXT NOT NULL,
+                "Name" TEXT NOT NULL,
+                "Address" TEXT NOT NULL,
+                "FirstSeenUtc" TEXT NOT NULL,
+                "LastSeenUtc" TEXT NOT NULL,
+                "BundlesSeenIn" INTEGER NOT NULL,
+                "TotalChanges" INTEGER NOT NULL);
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_MachineSignals_SerialNumber_Kind_Name_Address"
+                ON "MachineSignals" ("SerialNumber", "Kind", "Name", "Address");
+            CREATE INDEX IF NOT EXISTS "IX_MachineSignals_MachineType"
+                ON "MachineSignals" ("MachineType");
+            """),
+
         ("ProductionLogFiles", """
             CREATE TABLE IF NOT EXISTS "ProductionLogFiles" (
                 "Id" INTEGER NOT NULL CONSTRAINT "PK_ProductionLogFiles" PRIMARY KEY AUTOINCREMENT,

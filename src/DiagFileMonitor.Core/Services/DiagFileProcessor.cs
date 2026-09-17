@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using DiagFileMonitor.Core.Models;
+using DiagFileMonitor.Core.SpidaLogs;
 
 namespace DiagFileMonitor.Core.Services;
 
@@ -23,14 +24,17 @@ public class DiagFileProcessor
     };
 
     private readonly ProductionImportService? _production;
+    private readonly SignalCatalogueService? _signals;
 
     public DiagFileProcessor(string extractRootPath, DiagFileRepository repository,
-        bool fileNameTimesAreUtc = true, ProductionImportService? production = null)
+        bool fileNameTimesAreUtc = true, ProductionImportService? production = null,
+        SignalCatalogueService? signals = null)
     {
         _extractRootPath = extractRootPath;
         _repository = repository;
         _fileNameTimesAreUtc = fileNameTimesAreUtc;
         _production = production;
+        _signals = signals;
         Directory.CreateDirectory(_extractRootPath);
     }
 
@@ -141,6 +145,7 @@ public class DiagFileProcessor
         // which machine it came from. That pairing is the only thing that files production data
         // against a serial without somebody typing one in.
         await ImportProductionReportAsync(diagFile, token);
+        await LearnSignalsAsync(diagFile, token);
 
         return diagFile;
     }
@@ -183,6 +188,42 @@ public class DiagFileProcessor
         catch (Exception ex)
         {
             SimpleLogger.Error($"Could not read the production report in '{diagFile.OriginalFileName}'", ex);
+        }
+    }
+
+    /// <summary>
+    /// Folds this bundle's machine log into what is known about the machine's I/O.
+    /// <para>
+    /// Nothing else carries a list of a machine's inputs and outputs, so it is learned by
+    /// watching. Like the production import, anything going wrong here is noted and swallowed -
+    /// it must never cost the user the diagnostic import they actually asked for.
+    /// </para>
+    /// </summary>
+    private async Task LearnSignalsAsync(DiagnosticFile diagFile, CancellationToken token)
+    {
+        if (_signals is null) return;
+        if (diagFile.Status != ProcessingStatus.Processed) return;
+        if (string.IsNullOrWhiteSpace(diagFile.SerialNumber)) return;
+        if (diagFile.ExtractedPath is null) return;
+
+        try
+        {
+            var log = FindByName(diagFile.ExtractedPath, "machinelog.txt");
+            if (log is null) return;
+
+            var result = await _signals.RecordAsync(
+                diagFile.SerialNumber.Trim(), diagFile.MachineType ?? string.Empty,
+                IoTimeline.FromFile(log), token);
+
+            if (result.PointsNew > 0)
+            {
+                SimpleLogger.Info($"Learned {result.PointsNew} new I/O point(s) for "
+                                  + $"{diagFile.SerialNumber} from '{diagFile.OriginalFileName}'.");
+            }
+        }
+        catch (Exception ex)
+        {
+            SimpleLogger.Error($"Could not read the I/O out of '{diagFile.OriginalFileName}'", ex);
         }
     }
 

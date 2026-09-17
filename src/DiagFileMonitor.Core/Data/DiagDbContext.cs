@@ -9,6 +9,7 @@ public class DiagDbContext : DbContext
     public DbSet<ExtractedLogFile> ExtractedLogFiles => Set<ExtractedLogFile>();
     public DbSet<ProductionLogFile> ProductionLogFiles => Set<ProductionLogFile>();
     public DbSet<ProductionPanel> ProductionPanels => Set<ProductionPanel>();
+    public DbSet<MachineSignal> MachineSignals => Set<MachineSignal>();
 
     public DiagDbContext(DbContextOptions<DiagDbContext> options) : base(options)
     {
@@ -43,6 +44,12 @@ public class DiagDbContext : DbContext
             .WithOne(p => p.LogFile)
             .HasForeignKey(p => p.ProductionLogFileId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        var signal = modelBuilder.Entity<MachineSignal>();
+        signal.HasKey(s => s.Id);
+        // All four parts, because neither the name nor the address is unique on a real machine.
+        signal.HasIndex(s => new { s.SerialNumber, s.Kind, s.Name, s.Address }).IsUnique();
+        signal.HasIndex(s => s.MachineType);
 
         var panel = modelBuilder.Entity<ProductionPanel>();
         panel.HasKey(p => p.Id);

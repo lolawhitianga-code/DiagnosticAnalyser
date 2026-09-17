@@ -48,8 +48,11 @@ public partial class App : System.Windows.Application
         // Every bundle carries a few days of production data and the serial to file it under, so
         // the processor stores that alongside the diagnostic import.
         var production = new ProductionImportService(repository.ContextFactory);
+        // Nothing carries a machine's I/O map, so it is learned from every machine log that comes
+        // through. That is what lets a reading say which points this log never touched.
+        var signals = new SignalCatalogueService(repository.ContextFactory);
         var processor = new DiagFileProcessor(
-            settings.ExtractRootPath, repository, settings.FileNameTimesAreUtc, production);
+            settings.ExtractRootPath, repository, settings.FileNameTimesAreUtc, production, signals);
         _monitorService = new FolderMonitorService(processor);
         _notifier = new TrayNotifier();
 
@@ -63,7 +66,7 @@ public partial class App : System.Windows.Application
         var alertService = BuildAlertService(settings, repository, analysisService);
 
         var viewModel = new MainViewModel(settingsService, repository, _monitorService, _notifier,
-            cleanupService, resetService, analysisService, comparisonService, alertService);
+            cleanupService, resetService, analysisService, comparisonService, alertService, signals);
 
         var mainWindow = new MainWindow { DataContext = viewModel };
 

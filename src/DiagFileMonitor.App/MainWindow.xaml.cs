@@ -24,6 +24,7 @@ public partial class MainWindow : Window
             previous.FeedbackRequested -= OnFeedbackRequested;
             previous.ReportRequested -= OnReportRequested;
             previous.ProductionReportRequested -= OnProductionReportRequested;
+            previous.IoStateRequested -= OnIoStateRequested;
         }
 
         if (e.NewValue is ViewModels.MainViewModel current)
@@ -32,6 +33,7 @@ public partial class MainWindow : Window
             current.FeedbackRequested += OnFeedbackRequested;
             current.ReportRequested += OnReportRequested;
             current.ProductionReportRequested += OnProductionReportRequested;
+            current.IoStateRequested += OnIoStateRequested;
         }
     }
 
@@ -42,6 +44,20 @@ public partial class MainWindow : Window
             Owner = this,
             DataContext = new ViewModels.AnalysisViewModel(result.Heading, result.ReportText)
         }.Show();
+    }
+
+    private void OnIoStateRequested(object? sender, ViewModels.MainViewModel.IoStateRequestArgs request)
+    {
+        if (DataContext is not ViewModels.MainViewModel viewModel) return;
+
+        var model = new ViewModels.IoStateViewModel(
+            request.MachineLogPath, request.Heading, request.SerialNumber, viewModel.SignalCatalogue);
+
+        new IoStateWindow { Owner = this, DataContext = model }.Show();
+
+        // What else this machine is known to have is a database read, so it lands a moment after
+        // the window rather than holding it shut.
+        _ = model.LoadCatalogueAsync();
     }
 
     private void OnReportRequested(object? sender, ViewModels.MainViewModel.ReportRequestArgs request)

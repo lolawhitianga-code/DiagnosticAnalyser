@@ -214,6 +214,17 @@ files, the machine configuration, the CloudLog folder.
 Opens that log from the selected bundle in your text editor. Greyed out when the bundle does not
 carry it.
 
+<!--help:main.iostate-->
+### I/O at a moment
+
+Opens machinelog.txt at a point in time and shows what every input and output was doing right then.
+
+Reading a log line by line tells you what changed. It does not tell you what was already held on,
+which is usually the thing that explains the fault - a clamp still energised, a sensor still made.
+This works that out by replaying every change from the top of the file.
+
+Greyed out when the bundle has no machinelog.txt. Also on the right-click menu.
+
 <!--help:main.casenotes-->
 ### Case notes
 
@@ -518,6 +529,87 @@ Use it to answer "has any other machine ever done this?".
 ### Open this log file
 
 Opens the log the highlighted match came from, so you can read around it.
+
+---
+
+## Inputs and outputs at a moment
+
+<!--help:iostate.browse-->
+### Open a log
+
+Reads any MachineLog.txt, not only one from a stored bundle. Use it for a log somebody has emailed
+you before it has been through the watch folder.
+
+<!--help:iostate.moment-->
+### Moment
+
+The moment being reported. Type a time like `07:53:38` or `07:53:38.9085106` and press Go, or just
+click a line in the list.
+
+The state shown is as at that line, **including** it - so clicking a line that reads
+"TopStudClamp Set On" shows that output on.
+
+If the log runs past midnight the same clock time happens twice, and a typed time lands on the
+later one. Click the line instead when that matters. The page says so underneath when it applies.
+
+<!--help:iostate.step-->
+### Stepping
+
+`|<` and `>|` jump to the first and last line. `< Change` and `Change >` step to the previous or
+next input or output change, skipping everything else, which is how you follow a sequence without
+scrolling through thousands of step numbers.
+
+<!--help:iostate.onlyon-->
+### Only show what is on
+
+Hides everything that was off, leaving the short list. Handy for a ticket. Everything else about
+the reading is unchanged.
+
+<!--help:iostate.copy-->
+### Copy for ticket
+
+Puts the whole reading on the clipboard as plain text - the moment, the line, and every input and
+output with its state. Paste it straight into Zoho.
+
+<!--help:iostate.lines-->
+### The log lines
+
+Every line of the file, in order. Clicking one sets the moment. Input and output changes are shown
+in blue so they stand out from step numbers and motion events.
+
+<!--help:iostate.filter-->
+### Filter
+
+Narrows the line list to lines whose tag, detail, kind or time contains what you type. Press Enter
+or Filter. It only hides lines from the list - the state is still worked out from the whole file,
+so a filtered view never changes the answer.
+
+Stepping to a change outside the filter clears it rather than refusing to move.
+
+<!--help:iostate.outputs-->
+### Outputs
+
+Every output this log ever moves, in name order so rows stay put as you step through time. On rows
+are shaded.
+
+**Held** is when it last changed. **Moves** is how many times it changes in the whole file - an
+output that moves once and an output that moves nine hundred times are different animals.
+
+A point is listed by name **and** address because neither is unique. The same name can be two
+coils, one per side of the machine, and the same address can carry two named points. Where that
+happens it is spelled out underneath.
+
+A greyed italic row means nothing had touched that output yet at this moment, so its state is read
+backwards from its next change rather than measured.
+
+<!--help:iostate.inputs-->
+### Inputs
+
+The same, for inputs - sensors, switches and confirms. `Changed to 1` is on, `Changed to 0` is off.
+
+The list is built from the log itself, because nothing else carries it: Machine.xml has no I/O map.
+So an input only appears once it has moved at least once somewhere in the file. One that never
+moves is not in the list at all, and that absence is itself worth noticing.
 
 ---
 
