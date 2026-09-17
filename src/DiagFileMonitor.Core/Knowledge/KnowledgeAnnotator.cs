@@ -71,6 +71,9 @@ public class KnowledgeFindings
     /// <summary>What the operator asked for on the two-hand control, and what followed.</summary>
     public TwoHandControlFindings TwoHandControl { get; init; } = new();
 
+    /// <summary>The machine driven into position with no cut following, over and over.</summary>
+    public CutNotTakenFindings CutNotTaken { get; init; } = new();
+
     /// <summary>How the last step ended against how that step usually ends.</summary>
     public StepStoryFindings StepStory { get; init; } = new();
 
@@ -80,6 +83,7 @@ public class KnowledgeFindings
         DriveFaults.Count > 0
         || MotorConfirm.Any
         || TwoHandControl.Any
+        || CutNotTaken.Any
         || StepStory.Any
         || (Knowledge is not null
             && (MatchedFaults.Count > 0 || IssuesSeenInThisLog.Count > 0 || IssueHistoryForSerial.Count > 0
@@ -114,6 +118,7 @@ public static class KnowledgeAnnotator
         // for a machine we have no notes for as well.
         var twoHand = TwoHandControlCheck.Check(machineLog);
         var stepStory = StepOutcomeCheck.Check(machineLog);
+        var cutNotTaken = CutNotTakenCheck.Check(machineLog);
 
         if (knowledge is null)
         {
@@ -125,7 +130,8 @@ public static class KnowledgeAnnotator
                 AxisHardware = axisHardware,
                 MotorConfirm = motorConfirm,
                 TwoHandControl = twoHand,
-                StepStory = stepStory
+                StepStory = stepStory,
+                CutNotTaken = cutNotTaken
             };
         }
 
@@ -190,7 +196,8 @@ public static class KnowledgeAnnotator
             AxisHardware = axisHardware,
             MotorConfirm = motorConfirm,
             TwoHandControl = twoHand,
-            StepStory = stepStory
+            StepStory = stepStory,
+            CutNotTaken = cutNotTaken
         };
     }
 

@@ -126,3 +126,56 @@ The technician's note was worth more than the bundle. The bundle had been analys
 report was wrong; what made the difference was somebody writing down *how they read it* - work
 backwards from the last operator action, and compare a step against its own history. Both of those
 are now checks that run on every export, including machines nobody has written up.
+
+## Case 2 - M22215, 17 Sep 2026: "manual to 335 thntd, no action"
+
+SprintM600 saw at Akarana Timbers, Christchurch. Verdict: **missed it**.
+
+The operator drove the trolley to a position by hand, pressed the two-hand control, and nothing
+happened. The report of the day said the log ended on an axis status and the machine had been
+stopped from the HMI. Both true. Neither any use.
+
+### What the log actually says
+
+The support person's reading was right, and the evidence is stronger than they realised:
+
+- **THNTD appears nowhere in the bundle.** Not once, in any file. On this machine the two-hand
+  buttons are wired straight into the PLC, so the software only ever sees a press the PLC has
+  already accepted. An operator pressing and getting nothing leaves no trace at all.
+- The trolley **did** reach 339.1, at 09:00:00.762, 2.2 s after the command.
+- Then **not one line was written for 13.1 seconds** until the operator opened the lid. That
+  silence is the finding.
+- The same thing happened **six times** after the last cut: driven into position, nothing, lid
+  opened or reset pressed, try again.
+- **Every one of the 27 cuts in that log began with cut mode `Board`. Not one began with `None`,
+  and cut mode was `None` for all six attempts.** That is measured in this log, not a rule anyone
+  has told us, but it makes the suspicion concrete.
+
+One correction to the report of the case: the servos disabling was not a second symptom. The
+operator opened the lid, and the interlock dropped them 0.17 s later. Eight of the thirteen lid
+requests in that log are followed by a servo disable inside half a second.
+
+### What was built
+
+`CutNotTakenCheck`, and the report section **ASKED FOR A CUT AND NOTHING HAPPENED**.
+
+Generalising it took more care than the detection:
+
+- **Cut cycles are found by the machine's own habit, not by step numbers.** A SprintM600 runs
+  10, 20, 30, 40, 0; the M20716 saw goes to 60. Bursts of `BladeCutStep` are grouped by time and
+  one counts as a cut when it reaches at least the median top step. That drops the short 5/7/12
+  bursts a SprintM600 logs when the blade is raised by hand - count those as cuts and "the last
+  cut" moves forward, hiding the very silence being looked for.
+- **`Cutmode` is only used where the log has it.** The M20716 saw never writes one.
+- **The retry is what stops it crying wolf.** A saw being put away at the end of a shift leaves
+  the same idle moves behind - the 100,000 line M20716 control log has five - and not one is
+  retried. Checked against that log: 34 cut cycles found, 10 idle moves after the last one, zero
+  waits reported.
+- Two waits are needed before anything prints. One is a moment; two is a pattern.
+
+### Still unproven
+
+Whether cut mode `None` is *why* the PLC ignored the buttons. The correlation is perfect within
+this one log and that is all it is. The report says so in those words and puts it first on the
+list to check rather than stating it as fact. **Second sighting would make it inferred; a word
+from somebody who knows the PLC would make it confirmed.**

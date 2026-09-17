@@ -76,6 +76,18 @@ public static class TwoHandControlCheck
 
     private static readonly string[] TwoHandTags = { "THNTD" };
 
+    /// <summary>
+    /// Whether this machine logs a two-hand control at all.
+    /// <para>
+    /// Silence here is not "nothing to report". On a SprintM600 the buttons go straight into the
+    /// PLC and the software only ever sees a press the PLC has accepted, so an operator pressing
+    /// and getting nothing leaves no trace whatsoever. Saying so is the whole point.
+    /// </para>
+    /// </summary>
+    public static bool EverLogged(IReadOnlyList<MachineLogEntry> entries) => entries
+        .Any(e => e.Category == MachineLogCategory.InputChange
+                  && TwoHandTags.Contains(e.Tag, StringComparer.OrdinalIgnoreCase));
+
     public static TwoHandControlFindings Check(IReadOnlyList<MachineLogEntry> entries)
     {
         if (entries.Count == 0) return new TwoHandControlFindings();

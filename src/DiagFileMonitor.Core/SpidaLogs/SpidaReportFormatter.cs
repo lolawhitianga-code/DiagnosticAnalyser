@@ -39,6 +39,8 @@ public static class SpidaReportFormatter
         // What the operator last asked for, and what the machine did about it. This goes high up
         // because on a hand-driven machine it is usually the answer.
         if (knowledge is not null) AppendLastOperatorAction(text, knowledge);
+        // Higher still when it fires: it is the complaint itself, not context for it.
+        if (knowledge is not null) AppendCutNotTaken(text, knowledge.CutNotTaken);
         if (knowledge is not null) AppendMotorConfirm(text, knowledge);
         if (knowledge is not null) AppendDriveFaults(text, knowledge);
         AppendUnits(text, analysis);
@@ -270,6 +272,85 @@ public static class SpidaReportFormatter
         }
 
         AppendFiringAudit(text, hand);
+    }
+
+    /// <summary>
+    /// The machine driven into position over and over with no cut following.
+    /// <para>
+    /// From a real M22215 case where the operator wrote "manual to 335 thntd, no action". The
+    /// report of the day said the log ended on an axis status - true, and no use to anybody. What
+    /// the log shows is the trolley reaching position and then nothing at all being written for
+    /// thirteen seconds, six times over.
+    /// </para>
+    /// </summary>
+    private static void AppendCutNotTaken(StringBuilder text, CutNotTakenFindings cut)
+    {
+        if (!cut.Any) return;
+
+        text.AppendLine();
+        text.AppendLine("ASKED FOR A CUT AND NOTHING HAPPENED");
+        text.AppendLine(new string('-', 78));
+
+        text.AppendLine($"  The machine was driven into position {cut.Waits.Count} time(s) and no cut followed");
+
+        if (cut.LastCutAt is { } at)
+            text.AppendLine($"  any of them. The last cut this machine made was at {at:hh\\:mm\\:ss}.");
+        else
+            text.AppendLine("  any of them.");
+
+        text.AppendLine("  Each time, the operator gave up and started again.");
+        text.AppendLine();
+
+        foreach (var wait in cut.Waits)
+        {
+            text.AppendLine($"    {wait.RequestedAt:hh\\:mm\\:ss\\.fff}  {wait.Describe()}");
+
+            var arrived = wait.InPositionAt is { } inPosition
+                ? $"in position {inPosition:hh\\:mm\\:ss\\.fff}, "
+                : "no arrival logged, ";
+
+            var silence = wait.EntriesWhileWaiting == 0
+                ? "nothing logged at all"
+                : $"only {wait.EntriesWhileWaiting} line(s) logged";
+
+            text.AppendLine($"                  {arrived}{silence} for {wait.Waited.TotalSeconds:0.#}s,");
+            text.AppendLine($"                  then {wait.GaveUpBy} at {wait.GaveUpAt:hh\\:mm\\:ss\\.fff}");
+        }
+
+        text.AppendLine();
+
+        if (!cut.TwoHandEverLogged)
+        {
+            text.AppendLine("  >>> No two-hand control input appears anywhere in this log.");
+            text.AppendLine("      Where the buttons are wired straight into the PLC, the software only ever");
+            text.AppendLine("      sees a press the PLC has already accepted. An operator pressing and getting");
+            text.AppendLine("      nothing looks exactly like this - silence. The log cannot tell you whether");
+            text.AppendLine("      the buttons were pressed, so it cannot rule the operator out either.");
+            text.AppendLine();
+        }
+
+        if (cut.CutModeDuringWaits.Length > 0)
+        {
+            text.AppendLine($"  Cut mode was {cut.CutModeDuringWaits} for every one of those attempts.");
+
+            var cut_ = string.Join(", ", cut.CutModeAtCutStart.Select(m => $"{m.Value} under {m.Key}"));
+            if (cut_.Length > 0)
+                text.AppendLine($"  The {cut.CutCycles} cut(s) this log does contain: {cut_}.");
+
+            if (cut.CutModesThatNeverCut.Contains(cut.CutModeDuringWaits, StringComparer.OrdinalIgnoreCase))
+            {
+                text.AppendLine($"  >>> Nothing in this log ever cut while cut mode was {cut.CutModeDuringWaits}.");
+                text.AppendLine("      That is measured here, not a rule we have been told - but it is the");
+                text.AppendLine("      first thing to check.");
+            }
+
+            text.AppendLine();
+        }
+
+        text.AppendLine("  What to check, in order:");
+        text.AppendLine("    1. Are the two-hand buttons making? Meter them at the PLC input, not at the HMI.");
+        text.AppendLine("    2. If they are, is the PLC accepting them in the mode the machine was in?");
+        text.AppendLine("    3. Ask the operator what they pressed and what the screen said at the time.");
     }
 
     /// <summary>
@@ -634,6 +715,20 @@ public static class SpidaReportFormatter
             leads.Add($"The machine's last act was {lastEvent.Tag} \"{lastEvent.Description}\" at "
                       + $"{lastEvent.Time:hh\\:mm\\:ss}{Age(lastEvent.Time)}. Start at the end of the log "
                       + "and work back.");
+        }
+
+        // The machine put in position over and over with no cut. Above the motor checks because
+        // when it fires it is the complaint itself.
+        if (knowledge?.CutNotTaken is { Any: true } cut)
+        {
+            var mode = cut.CutModeDuringWaits.Length > 0
+                ? $" Cut mode was {cut.CutModeDuringWaits} throughout, and nothing in this log ever cut in that mode."
+                : string.Empty;
+
+            leads.Add($"The machine was driven into position {cut.Waits.Count} times with no cut following"
+                      + $"{Age(cut.Waits[^1].RequestedAt)}, and the operator retried every time.{mode} "
+                      + "Check the two-hand buttons at the PLC input, then whether the PLC accepts them "
+                      + "in that mode.");
         }
 
         // A motor that never reported itself running is as concrete as it gets, and it is
