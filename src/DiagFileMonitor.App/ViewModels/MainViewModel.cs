@@ -6,6 +6,7 @@ using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DiagFileMonitor.App.Services;
+using DiagFileMonitor.Core.Fleet;
 using DiagFileMonitor.Core.Models;
 using DiagFileMonitor.Core.Reports;
 using DiagFileMonitor.Core.Services;
@@ -913,6 +914,66 @@ public partial class MainViewModel : ObservableObject
         {
             StatusMessage = $"Could not import: {ex.Message}";
             SimpleLogger.Error("Could not import dropped files", ex);
+        }
+        finally
+        {
+            IsAnalysing = false;
+            RefreshCommandStates();
+        }
+    }
+
+    /// <summary>
+    /// v1AI: the installed base on one page, plus a passport per machine.
+    /// <para>
+    /// Everything it needs is already on this PC. It reads a year of support bundles and turns
+    /// them into the two questions a manufacturer cannot otherwise answer - how is the fleet, and
+    /// who is worth a call.
+    /// </para>
+    /// </summary>
+    [RelayCommand]
+    private async Task BuildFleetReportAsync()
+    {
+        IsAnalysing = true;
+        StatusMessage = "Reading the installed base...";
+        RefreshCommandStates();
+
+        try
+        {
+            var fleet = await new FleetBuilder(_repository.ContextFactory).BuildAsync();
+
+            if (fleet.Count == 0)
+            {
+                StatusMessage = "No machines stored yet. Import some bundles first.";
+                return;
+            }
+
+            var folder = Path.Combine(ReportsFolder, "Fleet");
+            Directory.CreateDirectory(folder);
+
+            var renderer = new ReportHtmlRenderer();
+            var now = DateTime.Now;
+
+            var path = Path.Combine(folder, $"fleet-{now:yyyy-MM-dd}.html");
+            await File.WriteAllTextAsync(path, renderer.Render(FleetReport.Build(fleet, now)));
+
+            foreach (var machine in fleet)
+            {
+                await File.WriteAllTextAsync(
+                    Path.Combine(folder, $"passport-{machine.SerialNumber}.html"),
+                    renderer.Render(MachinePassportReport.Build(machine, now)));
+            }
+
+            var calls = OpportunityRadar.Scan(fleet, DateTime.UtcNow).Count;
+
+            StatusMessage = $"{fleet.Count} machine(s), {calls} worth a call. "
+                            + $"Written to {folder}.";
+
+            Launch(path, isFolder: false);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Could not build the fleet report: {ex.Message}";
+            SimpleLogger.Error("Could not build the fleet report", ex);
         }
         finally
         {

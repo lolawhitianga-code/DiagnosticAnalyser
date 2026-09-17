@@ -208,6 +208,20 @@ gets set up. Several bundles from the same machine count once.
 
 With nothing selected the report covers every machine, which is what it has always done.
 
+<!--help:main.fleet-->
+### Fleet
+
+The installed base on one page, built from every bundle already on this PC. It needs nothing from
+any customer.
+
+Three things: what each model actually does measured across the machines we have data for, which
+machines are worth a call and why, and a passport page per machine you can read before you ring
+somebody.
+
+It only knows machines that have sent us a bundle. A machine running perfectly and never sending
+one does not appear, and those are usually the best ones - so read it as a picture of who we hear
+from, not of everything we have sold.
+
 <!--help:main.production-->
 ### Production
 

@@ -186,6 +186,7 @@
                         ToolTip="Measure the selected bundle against the benchmark master: step process, speed and settings." />
                 <Button Content="Report" help:Help.Topic="main.report" Command="{Binding BuildReportCommand}" Width="80" Margin="0,0,6,0"
                         ToolTip="Build an HTML report from the stored bundles: every fault occurrence across the fleet, or the case for a design change." />
+                <Button Content="Fleet" help:Help.Topic="main.fleet" Command="{Binding BuildFleetReportCommand}" Width="70" Margin="0,0,6,0" />
                 <Button Content="Production" help:Help.Topic="main.production" Command="{Binding BuildProductionReportCommand}" Width="90" Margin="0,0,12,0"
                         ToolTip="Read ProdLogV2 weekly production logs into this PC and build a production report: panels, cube, lineal metres and availability." />
                 <Button Content="Open folder" help:Help.Topic="main.openfolder" Command="{Binding OpenExtractedFolderCommand}" Width="100" Margin="0,0,6,0"
