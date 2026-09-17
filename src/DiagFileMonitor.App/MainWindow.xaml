@@ -4,7 +4,8 @@
         xmlns:help="clr-namespace:DiagFileMonitor.App.Help"
         Title="Diagnostic File Monitor" Height="700" Width="1220"
         MinHeight="520" MinWidth="900"
-        Background="{StaticResource AppBackground}">
+        Background="{StaticResource AppBackground}"
+        AllowDrop="True" Drop="Window_Drop" DragOver="Window_DragOver">
 
     <Window.Resources>
         <Style TargetType="GroupItem">
@@ -135,6 +136,8 @@
                 <TextBlock Text="Group by:" help:Help.Topic="main.groupby" VerticalAlignment="Center" Width="110" />
                 <ComboBox ItemsSource="{Binding GroupByOptions}" SelectedItem="{Binding SelectedGroupBy}"
                           Width="180" Margin="0,0,12,0" />
+                <Button Content="Import files..." help:Help.Topic="main.import" Command="{Binding ImportFilesCommand}" Width="105" Margin="0,0,6,0"
+                        Style="{StaticResource PrimaryButton}" />
                 <Button Content="Refresh" help:Help.Topic="main.refresh" Command="{Binding LoadCommand}" Width="80" Margin="0,0,12,0" />
                 <Button Content="Search in logs..." help:Help.Topic="main.logsearch" Click="OpenLogSearch_Click" Width="130" Margin="0,0,20,0" />
                 <TextBlock Text="Keep extracts for" help:Help.Topic="main.cleanup" VerticalAlignment="Center" Margin="0,0,6,0" />

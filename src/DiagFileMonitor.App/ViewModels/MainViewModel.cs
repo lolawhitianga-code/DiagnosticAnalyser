@@ -861,6 +861,66 @@ public partial class MainViewModel : ObservableObject
         StatusMessage = "Not monitoring.";
     }
 
+    /// <summary>
+    /// Takes bundles the user hands over directly, from the Import button or dropped on the
+    /// window.
+    /// <para>
+    /// Before this, a bundle that arrived by email meant saving it, finding the watched folder,
+    /// saving it there again and waiting. Four steps to do the thing the app exists for.
+    /// </para>
+    /// </summary>
+    [RelayCommand]
+    private async Task ImportFilesAsync()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Choose diagnostic bundles to import",
+            Filter = "Diagnostic bundles (*.szip;*.zip)|*.szip;*.zip|All files (*.*)|*.*",
+            Multiselect = true
+        };
+
+        if (dialog.ShowDialog() != true) return;
+
+        await ImportPathsAsync(dialog.FileNames);
+    }
+
+    /// <summary>Called by the window when files are dropped on it.</summary>
+    public async Task ImportPathsAsync(IReadOnlyList<string> paths)
+    {
+        if (paths.Count == 0) return;
+
+        IsAnalysing = true;
+        StatusMessage = paths.Count == 1
+            ? $"Importing {Path.GetFileName(paths[0])}..."
+            : $"Importing {paths.Count} file(s)...";
+        RefreshCommandStates();
+
+        try
+        {
+            var results = await _monitorService.ImportAsync(paths);
+
+            var stored = results.Count(r => r.Stored is not null);
+            var failed = results.Where(r => r.Problem is not null).ToList();
+
+            await LoadAsync();
+
+            StatusMessage = failed.Count == 0
+                ? $"Imported {stored} file(s)."
+                : $"Imported {stored} of {results.Count}. "
+                  + string.Join("  ", failed.Take(3).Select(f => $"{Path.GetFileName(f.Path)}: {f.Problem}"));
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Could not import: {ex.Message}";
+            SimpleLogger.Error("Could not import dropped files", ex);
+        }
+        finally
+        {
+            IsAnalysing = false;
+            RefreshCommandStates();
+        }
+    }
+
     [RelayCommand]
     private void AddFolder()
     {

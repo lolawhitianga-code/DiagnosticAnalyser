@@ -9,6 +9,12 @@ public class MachineLogFault
     public int? StepAtFault { get; init; }
     public IReadOnlyList<MachineLogEntry> Context { get; init; } = Array.Empty<MachineLogEntry>();
 
+    /// <summary>
+    /// Somebody pressed something. Worth reporting, never as a fault - and never as evidence of
+    /// a sensor or a piece of hardware.
+    /// </summary>
+    public bool IsOperatorAction { get; init; }
+
     /// <summary>Fault text with numbers masked, so the same fault matches across attempts.</summary>
     public string Signature => Regex.Replace(Text, @"\d+", "#").Trim().ToUpperInvariant();
 }
@@ -20,6 +26,15 @@ public class MachineCycle
     public TimeSpan Start { get; init; }
     public TimeSpan End { get; init; }
     public IReadOnlyList<MachineLogFault> Faults { get; init; } = Array.Empty<MachineLogFault>();
+
+    /// <summary>What actually went wrong, with the operator's own button presses taken out.</summary>
+    public IReadOnlyList<MachineLogFault> MachineFaults =>
+        Faults.Where(f => !f.IsOperatorAction).ToList();
+
+    /// <summary>What the operator did during this attempt.</summary>
+    public IReadOnlyList<MachineLogFault> OperatorActions =>
+        Faults.Where(f => f.IsOperatorAction).ToList();
+
     public bool Completed { get; init; }
     public int? HighestStep { get; init; }
 
@@ -37,6 +52,12 @@ public class MachineCycle
 
 public class RepeatedFault
 {
+    /// <summary>
+    /// It landed on a different step each time, so it is not tied to one part of the cycle. Worth
+    /// saying: a fault that moves around is a different problem from one that does not.
+    /// </summary>
+    public bool StepsVary { get; init; }
+
     public string Text { get; init; } = string.Empty;
     public int Occurrences { get; init; }
     public IReadOnlyList<int> CycleNumbers { get; init; } = Array.Empty<int>();
@@ -79,6 +100,28 @@ public class SpidaLogAnalysis
     public IReadOnlyList<MachineLogEntry> FinalEntries { get; init; } = Array.Empty<MachineLogEntry>();
 
     /// <summary>
+    /// The end of MachineLog.txt exactly as written - every line, every category, nothing
+    /// filtered, in file order.
+    /// <para>
+    /// <see cref="FinalEntries"/> is a summary and it hides things. On a real M22215 export six of
+    /// the last twenty lines were InputChange and every one was dropped, including the
+    /// LidOpenRequest that caused the servo disable 0.17s later. The report showed the disable
+    /// with its cause removed, and nobody reading it could tell why the machine stopped. A
+    /// summary is worth having; it is not worth having instead of the file.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<MachineLogEntry> RawTail { get; init; } = Array.Empty<MachineLogEntry>();
+
+    /// <summary>
+    /// What the operator did, counted. Kept apart from faults: an operator pressing stop 29 times
+    /// is worth knowing and is not a machine fault.
+    /// </summary>
+    public IReadOnlyList<RepeatedFault> OperatorActions { get; init; } = Array.Empty<RepeatedFault>();
+
+    /// <summary>What a normal attempt looks like on this machine, in this log.</summary>
+    public CycleBaseline? Baseline { get; init; }
+
+    /// <summary>
     /// The last entry that says something about what the machine was doing, ignoring the input
     /// and output chatter that keeps ticking over after it has stopped, and the heartbeat lines
     /// that repeat thousands of times.
@@ -115,6 +158,12 @@ public class SpidaLogAnalyserOptions
 
     /// <summary>How many lines of the tail of the log to quote.</summary>
     public int FinalEntriesShown { get; set; } = 12;
+
+    /// <summary>
+    /// How many lines of the log to print verbatim at the end. Fifty is what a support person
+    /// asked for, and it covers the last cycle or two on every machine we have samples from.
+    /// </summary>
+    public int RawTailLines { get; set; } = 50;
 }
 
 /// <summary>
@@ -147,6 +196,47 @@ public class SpidaLogAnalyser
         new(@"\b(upload|sync)\b.*\b(task|queue|background)\b", RegexOptions.IgnoreCase)
     };
 
+    /// <summary>
+    /// Things the operator did on purpose. These are not faults and must never be reported as
+    /// one.
+    /// <para>
+    /// "Stop All Pressed" turns up 29 times in a real M22215 export and was the headline of that
+    /// report's DOES IT REPEAT section, under a sentence saying a repeat points at hardware or a
+    /// sensor. It points at a person pressing a button. Sending a technician to meter a sensor
+    /// for that is worse than saying nothing.
+    /// </para>
+    /// </summary>
+    private static readonly Regex OperatorAction = new(
+        @"\b(stop all pressed|stop pressed|estop pressed|e-stop pressed|reset pressed"
+        + @"|start pressed|button pressed|operator (stopped|cancelled|canceled|aborted))\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// Advisory lines the software writes about how a job is set up. They read like faults
+    /// because of one word and they are not events at all.
+    /// <para>
+    /// "Outfeed clamps not used to prevent jamb" appears 100 times in the same export and matched
+    /// only on "jam".
+    /// </para>
+    /// </summary>
+    private static readonly Regex Advisory = new(
+        @"\b(not used to prevent|is not set ?up for|will not be used|ignored because)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// Drive and axis states that are real faults. These arrive as MotionEvent rather than Other,
+    /// which the fault scan used to skip entirely.
+    /// <para>
+    /// Across the sample logs that hid Servo Movement Error (4, two of them inside a complaint
+    /// window nobody was told about), Unsafe to Move Axis (370), Servo Not Setup, Needs to be
+    /// Homed and Needs to be Reset. Only Omron F-codes were being picked up, by a different check.
+    /// </para>
+    /// </summary>
+    private static readonly Regex MotionFault = new(
+        @"\b(movement error|following error|servo (error|fault|not set ?up)"
+        + @"|needs to be (homed|reset)|overtravel|limit (hit|reached))\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     /// <summary>Descriptive Other-category text that reads like a fault rather than a counter.</summary>
     private static readonly Regex FaultWording = new(
         @"\b(cannot|can't|unable|not set ?up|failed|failure|fault|error|stopped|stop\b|lost|jam|check|press|estop|e-stop|revert|retry|try again|timeout|missing|invalid"
@@ -169,7 +259,7 @@ public class SpidaLogAnalyser
             notes.Add("MachineLog.txt was empty or could not be read, so no machine behaviour could be examined.");
         }
 
-        var cycles = SliceIntoCycles(machineLog);
+        var cycles = DropTheMachinesOwnHabits(SliceIntoCycles(machineLog), notes);
         var repeated = FindRepeatedFaults(cycles);
 
         var logStart = machineLog.Count > 0 ? machineLog[0].Time : (TimeSpan?)null;
@@ -197,12 +287,15 @@ public class SpidaLogAnalyser
             Last = cycles.Count > 0 ? cycles[^1] : null,
             SecondToLast = cycles.Count > 1 ? cycles[^2] : null,
             RepeatedFaults = repeated,
+            OperatorActions = FindRepeatedActions(cycles),
+            Baseline = CycleBaseline.From(cycles),
             RealErrors = real,
             CosmeticErrors = cosmetic,
             ErrorsOutsideLogWindow = outside,
             RepeatingBackgroundErrors = backgroundNoise,
             RecentSettingChanges = RecentChanges(changeLog, sessionDateUtc),
             FinalEntries = notable.TakeLast(_options.FinalEntriesShown).ToList(),
+            RawTail = machineLog.TakeLast(_options.RawTailLines).ToList(),
             ChatterSkipped = chatter.Count,
             LastNotableEvent = lastNotable,
             SilenceBeforeEnd = lastNotable is not null && logEnd is { } end
@@ -297,7 +390,11 @@ public class SpidaLogAnalyser
         for (var i = from; i < to; i++)
         {
             var entry = all[i];
-            if (entry.Category != MachineLogCategory.Other) continue;
+
+            // MotionEvent carries the drive-level faults, and skipping the whole category hid
+            // every one of them. Input and output changes are states, not faults, and stay out.
+            if (entry.Category is not (MachineLogCategory.Other or MachineLogCategory.MotionEvent))
+                continue;
 
             var step = ReadStep(entry);
             if (step is not null)
@@ -308,14 +405,20 @@ public class SpidaLogAnalyser
 
             var text = entry.Description.Trim();
             if (text.Length < 8) continue;
-            if (!FaultWording.IsMatch(text)) continue;
+
+            var motion = entry.Category == MachineLogCategory.MotionEvent;
+
+            // An axis reporting OK, Moving or Disabled is a state. Only the real failures count.
+            if (motion ? !MotionFault.IsMatch(text) : !FaultWording.IsMatch(text)) continue;
             if (NoisePatterns.Any(p => p.IsMatch(text))) continue;
+            if (Advisory.IsMatch(text)) continue;
 
             faults.Add(new MachineLogFault
             {
                 Time = entry.Time,
-                Text = text,
+                Text = motion ? $"{entry.Tag}: {text}" : text,
                 StepAtFault = currentStep,
+                IsOperatorAction = OperatorAction.IsMatch(text),
                 Context = all
                     .Skip(Math.Max(0, i - _options.ContextLines))
                     .Take(_options.ContextLines * 2 + 1)
@@ -327,13 +430,91 @@ public class SpidaLogAnalyser
     }
 
     /// <summary>
+    /// Anything landing in more than half the attempts is what this machine does, not what went
+    /// wrong with it.
+    /// <para>
+    /// "Unsafe to Move Axis" fires 370 times in a real M22215 export - every time the blade moves
+    /// during a cut - and treating it as a fault buried the four Servo Movement Errors that
+    /// actually mattered under a wall of noise. The rule is deliberately about frequency rather
+    /// than a list of words: the next machine will have its own habits and nobody will remember
+    /// to add them.
+    /// </para>
+    /// <para>
+    /// It is said out loud in the report's notes rather than done quietly, because a fault in
+    /// every cycle could also be a machine that is broken in every cycle.
+    /// </para>
+    /// </summary>
+    private static List<MachineCycle> DropTheMachinesOwnHabits(List<MachineCycle> cycles, List<string> notes)
+    {
+        if (cycles.Count < 4) return cycles;
+
+        var attemptsWith = cycles
+            .SelectMany(c => c.Faults.Where(f => !f.IsOperatorAction)
+                .Select(f => f.Signature).Distinct()
+                .Select(signature => (signature, c.Number)))
+            .GroupBy(pair => pair.signature)
+            .ToDictionary(g => g.Key, g => g.Select(p => p.Number).Distinct().Count(), StringComparer.Ordinal);
+
+        var habits = attemptsWith
+            .Where(pair => pair.Value > cycles.Count / 2)
+            .Select(pair => pair.Key)
+            .ToHashSet(StringComparer.Ordinal);
+
+        if (habits.Count == 0) return cycles;
+
+        var dropped = cycles
+            .SelectMany(c => c.Faults)
+            .Where(f => habits.Contains(f.Signature))
+            .GroupBy(f => f.Text)
+            .Select(g => $"\"{g.Key}\" (x{g.Count()})")
+            .ToList();
+
+        notes.Add($"Left out of the fault list because {(dropped.Count == 1 ? "it appears" : "they appear")} "
+                  + $"in more than half of this machine's attempts, which makes "
+                  + $"{(dropped.Count == 1 ? "it" : "them")} this machine's normal behaviour rather than a "
+                  + $"fault: {string.Join(", ", dropped)}. Say so if that is wrong.");
+
+        return cycles
+            .Select(c => new MachineCycle
+            {
+                Number = c.Number,
+                Start = c.Start,
+                End = c.End,
+                Completed = c.Completed,
+                HighestStep = c.HighestStep,
+                Faults = c.Faults.Where(f => !habits.Contains(f.Signature)).ToList()
+            })
+            .ToList();
+    }
+
+    /// <summary>Operator actions, counted the same way faults are, and kept separate from them.</summary>
+    private static List<RepeatedFault> FindRepeatedActions(List<MachineCycle> cycles) => cycles
+        .SelectMany(cycle => cycle.Faults.Where(f => f.IsOperatorAction).Select(fault => (cycle, fault)))
+        .GroupBy(pair => pair.fault.Signature)
+        .Select(group => new RepeatedFault
+        {
+            Text = group.First().fault.Text,
+            Occurrences = group.Count(),
+            CycleNumbers = group.Select(p => p.cycle.Number).Distinct().OrderBy(n => n).ToList(),
+            // Only claim a step when every occurrence really did land on the same one. Printing
+            // "at step 5" while the report's own attempt list says step 12 is how a reader stops
+            // trusting the whole thing.
+            StepAtFault = group.Select(p => p.fault.StepAtFault).Distinct().Count() == 1
+                ? group.First().fault.StepAtFault
+                : null,
+            StepsVary = group.Select(p => p.fault.StepAtFault).Distinct().Count() > 1
+        })
+        .OrderByDescending(a => a.Occurrences)
+        .ToList();
+
+    /// <summary>
     /// A fault at the same step across two or more attempts is a real hardware or sensor problem;
     /// one that appears once is more likely a transient.
     /// </summary>
     private static List<RepeatedFault> FindRepeatedFaults(List<MachineCycle> cycles)
     {
         return cycles
-            .SelectMany(cycle => cycle.Faults.Select(fault => (cycle, fault)))
+            .SelectMany(cycle => cycle.Faults.Where(f => !f.IsOperatorAction).Select(fault => (cycle, fault)))
             .GroupBy(pair => pair.fault.Signature)
             .Where(group => group.Select(p => p.cycle.Number).Distinct().Count() >= 2)
             .Select(group => new RepeatedFault
@@ -341,7 +522,13 @@ public class SpidaLogAnalyser
                 Text = group.First().fault.Text,
                 Occurrences = group.Count(),
                 CycleNumbers = group.Select(p => p.cycle.Number).Distinct().OrderBy(n => n).ToList(),
-                StepAtFault = group.Select(p => p.fault.StepAtFault).FirstOrDefault(s => s is not null)
+                // Only claim a step when every occurrence really did land on the same one. Printing
+                // "at step 5" while the report's own attempt list says step 12 is how a reader stops
+                // trusting the whole thing.
+                StepAtFault = group.Select(p => p.fault.StepAtFault).Distinct().Count() == 1
+                    ? group.First().fault.StepAtFault
+                    : null,
+                StepsVary = group.Select(p => p.fault.StepAtFault).Distinct().Count() > 1
             })
             .OrderByDescending(f => f.Occurrences)
             .ToList();

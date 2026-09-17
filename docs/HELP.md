@@ -64,6 +64,18 @@ Pops a tray notification when a bundle lands. Useful if the app sits minimised o
 Groups the list by customer, machine or status instead of one flat list. Handy when a site has sent
 a lot at once.
 
+<!--help:main.import-->
+### Import files
+
+Takes bundles straight from wherever they are - no need to save them into a watched folder first.
+Pick one or several.
+
+You can also **drag bundles onto the window** from Explorer or an email, which is the shortest way
+in.
+
+Imported files skip the "newer than N days" filter that watched folders use. A folder needs that
+filter or re-copying an archive would flood the list; a file you handed over deliberately does not.
+
 <!--help:main.refresh-->
 ### Refresh
 

@@ -35,7 +35,11 @@ public static class SpidaReportFormatter
 
         AppendOperatorText(text, file);
         if (complaint is not null) AppendComplaint(text, complaint);
-        AppendHowItEnded(text, analysis);
+        // What normal looks like comes before the end of the log is picked over. Reading the last
+        // few minutes closely without knowing the rest of the day is how an ordinary pause gets
+        // written up as a symptom.
+        AppendWhatNormalLooksLike(text, analysis);
+        AppendHowItEnded(text, analysis, file);
         // What the operator last asked for, and what the machine did about it. This goes high up
         // because on a hand-driven machine it is usually the answer.
         if (knowledge is not null) AppendLastOperatorAction(text, knowledge);
@@ -50,6 +54,7 @@ public static class SpidaReportFormatter
         if (knowledge is not null) KnowledgeReportFormatter.Append(text, knowledge);
         AppendWhereToLook(text, file, analysis, knowledge);
         AppendQuestions(text, analysis, knowledge);
+        AppendRawTail(text, analysis);
 
         if (analysis.Notes.Count > 0)
         {
@@ -133,7 +138,133 @@ public static class SpidaReportFormatter
     /// problem, so the last thing the machine did is usually the thing being reported - and a
     /// long quiet tail says it stopped and sat there rather than carrying on.
     /// </summary>
-    private static void AppendHowItEnded(StringBuilder text, SpidaLogAnalysis analysis)
+    /// <summary>
+    /// What a normal attempt looks like on this machine, before anything about the end of the log
+    /// is said.
+    /// <para>
+    /// Without it every report reads as though the last few minutes are remarkable. Sometimes they
+    /// are not, and saying so plainly is worth as much as finding a fault.
+    /// </para>
+    /// </summary>
+    private static void AppendWhatNormalLooksLike(StringBuilder text, SpidaLogAnalysis analysis)
+    {
+        if (analysis.Baseline is not { Any: true } baseline) return;
+
+        text.AppendLine();
+        text.AppendLine("WHAT NORMAL LOOKS LIKE HERE - before reading the end");
+
+        var window = analysis.LogStart is { } from && analysis.LogEnd is { } to
+            ? $"{from:hh\\:mm\\:ss} to {to:hh\\:mm\\:ss}"
+            : "this log";
+
+        text.AppendLine($"  Measured from this machine's own log, {window}. This machine against itself,");
+        text.AppendLine("  not against any other machine and not against a specification.");
+        text.AppendLine();
+
+        if (!baseline.WasRunningNormally)
+        {
+            text.AppendLine(baseline.Completed == 0
+                ? $"  None of the {baseline.Attempted} attempt(s) in this log completed."
+                : $"  Only {baseline.Completed} of {baseline.Attempted} attempt(s) completed.");
+
+            text.AppendLine("  That is too few to call anything normal, so there is no yardstick here to hold the");
+            text.AppendLine("  end of the log against. Read the whole file rather than trusting the end of it.");
+        }
+        else
+        {
+            text.AppendLine($"  {baseline.Completed} of {baseline.Attempted} attempt(s) completed. A typical one took "
+                            + $"{MachineCycle.Describe(baseline.Typical)},");
+            text.AppendLine($"  with most falling between {MachineCycle.Describe(baseline.Quickest)} and "
+                            + $"{MachineCycle.Describe(baseline.Slowest)}.");
+
+            if (baseline.WithFaults > 0)
+                text.AppendLine($"  {baseline.WithFaults} attempt(s) carried a machine fault of some kind.");
+        }
+
+        if (baseline.Last is { } last)
+        {
+            text.AppendLine();
+            var verdict = baseline.LastAgainstTypical switch
+            {
+                null => "there is nothing to compare it against",
+                < 1.5 and > 0.5 => "which is in line with the rest of the log",
+                >= 1.5 and < 3 => "which is longer than this machine's own habit",
+                >= 3 => ">>> which is far longer than this machine's own habit",
+                _ => "which is shorter than this machine's own habit"
+            };
+
+            text.AppendLine($"  The last attempt took {MachineCycle.Describe(last)}, {verdict}.");
+
+            if (!baseline.LastCompleted)
+                text.AppendLine("  It did not complete.");
+        }
+    }
+
+    /// <summary>
+    /// How long after the last log line the file was exported.
+    /// <para>
+    /// The whole report leans on the end of the log being the problem. That is only true when the
+    /// file was taken shortly afterwards, and how long afterwards is knowable, so it should be
+    /// said rather than assumed. The machine's clock and the export timestamp are two different
+    /// clocks, so anything beyond a few hours apart is reported as not knowable rather than
+    /// turned into a number nobody should trust.
+    /// </para>
+    /// </summary>
+    private static void AppendHowFresh(StringBuilder text, TimeSpan logEnd, DiagnosticFileSummary file)
+    {
+        var exported = file.ArrivedAtLocal.TimeOfDay;
+        var gap = exported - logEnd;
+
+        // Across midnight the other way round.
+        if (gap < TimeSpan.Zero) gap += TimeSpan.FromDays(1);
+
+        if (gap > TimeSpan.FromHours(6))
+        {
+            text.AppendLine($"  The file is timestamped {file.ArrivedDisplay}, which is a long way from the end of");
+            text.AppendLine("  the log. The machine's clock and this one may not agree, so treat the end of the");
+            text.AppendLine("  log as the problem only if the operator says the export was taken straight after.");
+            return;
+        }
+
+        text.AppendLine($"  The file was exported {MachineCycle.Describe(gap)} after that.");
+
+        if (gap < TimeSpan.FromMinutes(5))
+        {
+            text.AppendLine("  >>> Taken right after it happened, so the end of this log really is the problem.");
+        }
+        else
+        {
+            text.AppendLine("  The operator may have carried on working before taking the export, so the end of");
+            text.AppendLine("  the log is not necessarily the moment they are complaining about.");
+        }
+    }
+
+    /// <summary>
+    /// The end of the log exactly as written, every line and every category.
+    /// <para>
+    /// Everything above this is a reading. This is the file. A support person asked for it after a
+    /// case where the summary dropped the six InputChange lines that explained the whole thing.
+    /// </para>
+    /// </summary>
+    private static void AppendRawTail(StringBuilder text, SpidaLogAnalysis analysis)
+    {
+        if (analysis.RawTail.Count == 0) return;
+
+        text.AppendLine();
+        text.AppendLine($"THE LAST {analysis.RawTail.Count} LINES OF MACHINELOG.TXT, EXACTLY AS WRITTEN");
+        text.AppendLine(new string('-', 78));
+        text.AppendLine("  Nothing filtered, nothing reordered, every category. Everything above this is a");
+        text.AppendLine("  reading of the file; this is the file.");
+        text.AppendLine();
+
+        foreach (var entry in analysis.RawTail)
+        {
+            text.AppendLine($"  {entry.LineNumber,6}  {entry.Display}");
+        }
+    }
+
+    private static void AppendHowItEnded(
+        StringBuilder text, SpidaLogAnalysis analysis, DiagnosticFileSummary file)
     {
         if (analysis.FinalEntries.Count == 0) return;
 
@@ -146,6 +277,7 @@ public static class SpidaReportFormatter
         if (analysis.LogEnd is { } end)
         {
             text.AppendLine($"  The log ends at {end:hh\\:mm\\:ss}.");
+            AppendHowFresh(text, end, file);
         }
 
         if (analysis.LastNotableEvent is { } last && analysis.SilenceBeforeEnd is { } silence)
@@ -570,21 +702,69 @@ public static class SpidaReportFormatter
 
         if (analysis.RepeatedFaults.Count == 0)
         {
-            text.AppendLine("  No fault repeated across attempts. Treat what you see as a one-off unless the");
-            text.AppendLine("  customer says otherwise.");
-            return;
+            text.AppendLine("  No machine fault repeated across attempts. Treat what you see as a one-off unless");
+            text.AppendLine("  the customer says otherwise.");
         }
+
+        var atSameStep = false;
 
         foreach (var repeat in analysis.RepeatedFaults)
         {
-            var atStep = repeat.StepAtFault is { } step ? $", at step {step}" : string.Empty;
-            text.AppendLine($"  x{repeat.Occurrences} across attempts {string.Join(", ", repeat.CycleNumbers)}{atStep}:");
+            var atStep = repeat.StepAtFault is { } step
+                ? $", every time at step {step}"
+                : repeat.StepsVary ? ", at a different step each time" : string.Empty;
+
+            if (repeat.StepAtFault is not null) atSameStep = true;
+
+            var where = repeat.CycleNumbers.Count > 8
+                ? $"{repeat.CycleNumbers.Count} attempts, first {string.Join(", ", repeat.CycleNumbers.Take(4))}"
+                  + $" and last {repeat.CycleNumbers[^1]}"
+                : $"attempts {string.Join(", ", repeat.CycleNumbers)}";
+
+            text.AppendLine($"  x{repeat.Occurrences} across {where}{atStep}:");
             text.AppendLine($"      {repeat.Text}");
         }
 
+        // Only said where it is earned. Printing it under whatever repeated sent a technician to
+        // meter a sensor for an operator pressing stop, on a real M22215 report.
+        if (atSameStep)
+        {
+            text.AppendLine();
+            text.AppendLine("  A fault landing at the same step across attempts is worth treating as real - a");
+            text.AppendLine("  sensor, a connector or the mechanism at that step - rather than a one-off.");
+        }
+
+        AppendOperatorActions(text, analysis);
+    }
+
+    /// <summary>
+    /// What the operator kept doing. Worth knowing and never a fault.
+    /// <para>
+    /// "Stop All Pressed" 29 times used to head the repeating-fault list on a real M22215 report,
+    /// under a sentence saying a repeat points at hardware. It points at a person. An operator
+    /// stopping the machine over and over is a real signal - about the operator's experience of
+    /// the machine, which is a different question from what is broken.
+    /// </para>
+    /// </summary>
+    private static void AppendOperatorActions(StringBuilder text, SpidaLogAnalysis analysis)
+    {
+        if (analysis.OperatorActions.Count == 0) return;
+
         text.AppendLine();
-        text.AppendLine("  A fault repeating at the same step across attempts points at real hardware or a");
-        text.AppendLine("  sensor, not a glitch.");
+        text.AppendLine("  What the operator did (not faults):");
+
+        foreach (var action in analysis.OperatorActions.Take(5))
+        {
+            text.AppendLine($"    x{action.Occurrences} across {action.CycleNumbers.Count} attempt(s): {action.Text}");
+        }
+
+        var most = analysis.OperatorActions[0];
+
+        if (most.Occurrences >= 5)
+        {
+            text.AppendLine($"  Somebody did that {most.Occurrences} times in one session. That is worth asking about -");
+            text.AppendLine("  it says how the machine was behaving, even where nothing logged a fault.");
+        }
     }
 
     private static void AppendErrors(StringBuilder text, SpidaLogAnalysis analysis)
@@ -781,9 +961,18 @@ public static class SpidaReportFormatter
                       + "sensor and its cable.");
         }
 
+        // What to check depends on what failed. Telling somebody to meter a sensor because a
+        // servo reported a movement error sends them to the wrong end of the machine.
         foreach (var repeat in analysis.RepeatedFaults.Take(2))
         {
-            leads.Add($"The repeating fault \"{repeat.Text}\" - check the sensor, cable and connector for that mechanism.");
+            var where = repeat.Text.Contains("servo", StringComparison.OrdinalIgnoreCase)
+                        || repeat.Text.Contains("movement error", StringComparison.OrdinalIgnoreCase)
+                        || repeat.Text.Contains("following error", StringComparison.OrdinalIgnoreCase)
+                ? "check the drive, the coupling and whether anything is fouling that axis - "
+                  + "a movement error is the drive saying it could not get where it was told to go"
+                : "check the sensor, cable and connector for that mechanism";
+
+            leads.Add($"The repeating fault \"{repeat.Text}\" - {where}.");
         }
 
         if (analysis.Last?.Faults.LastOrDefault() is { } lastFault && analysis.RepeatedFaults.Count == 0)

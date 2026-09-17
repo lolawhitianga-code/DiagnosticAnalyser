@@ -273,6 +273,55 @@ public static class ComplaintTopics
                 "\"Clamps Air supply pressure is low\" right after an E-Stop reset is normal and not "
                     + "worth chasing on its own."
             }
+        },
+
+        // From a real M22215 case: "manual to 335 thntd, no action" matched nothing at all, and
+        // the report went on to work from the logs alone. THNTD is a word this codebase already
+        // knew - TwoHandControlCheck reads it - and the complaint router had never heard of it.
+        new()
+        {
+            Name = "Pressed the two-hand control and nothing happened",
+            Keywords = new[]
+            {
+                "thntd", "two hand", "two-hand", "twohand", "no action", "nothing happened",
+                "nothing happens", "no response", "did not respond", "didnt respond",
+                "won't go", "wont go", "will not go", "no cut", "didnt cut", "did not cut"
+            },
+            LogTags = new[] { "THNTD", "Cutmode", "BladeCutStep", "LidOpenRequest", "ResetPB" },
+            SettingWords = Array.Empty<string>(),
+            LookAt = new[]
+            {
+                "On some machines the two-hand buttons go straight into the PLC, so the software "
+                    + "only ever sees a press the PLC has already accepted. Where no two-hand input "
+                    + "appears anywhere in the log, silence does NOT mean nobody pressed it.",
+                "Check the buttons are making, at the PLC input rather than at the HMI.",
+                "If they are making, check whether the PLC accepts them in the mode the machine was "
+                    + "in. On a SprintM600, no cut in the sample log was ever made with cut mode "
+                    + "None - measured in one log, so worth checking rather than trusting.",
+                "The ASKED FOR A CUT AND NOTHING HAPPENED section above lists each attempt, if it fired."
+            }
+        },
+
+        // The same case: "manual to 335" is the operator saying they were driving it by hand.
+        new()
+        {
+            Name = "Driving the machine by hand from the HMI",
+            Keywords = new[]
+            {
+                "manual", "by hand", "hand mode", "manual mode", "jog", "jogged", "jogging",
+                "moved it to", "move to"
+            },
+            LogTags = new[] { "ClsTrolleyPusher", "Trolley", "Cutmode" },
+            SettingWords = Array.Empty<string>(),
+            LookAt = new[]
+            {
+                "A hand-driven move is logged the same way an automatic one is, so the position the "
+                    + "operator quotes should appear in the log as a \"Move to\" - check it matches "
+                    + "what they remember, because the number they give is often approximate.",
+                "What the machine was in when they did it matters as much as the move. A machine "
+                    + "driven by hand is usually out of its normal cycle and may not accept the next "
+                    + "thing the operator asks for."
+            }
         }
     };
 }

@@ -112,6 +112,52 @@ public class FolderMonitorService : IDisposable
     }
 
     /// <summary>
+    /// Takes bundles the user handed over directly - dropped on the window, or picked from the
+    /// Import button - rather than found in a watched folder.
+    /// <para>
+    /// The age filter is deliberately not applied. A watched folder needs it, because re-copying
+    /// a year of archives into one would otherwise flood the database. Somebody dragging one file
+    /// onto the window has said what they want, and silently ignoring it because of its name
+    /// would be the worst answer available.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<(string Path, DiagnosticFile? Stored, string? Problem)>> ImportAsync(
+        IEnumerable<string> paths, CancellationToken token = default)
+    {
+        var results = new List<(string, DiagnosticFile?, string?)>();
+
+        foreach (var path in paths)
+        {
+            try
+            {
+                if (!File.Exists(path))
+                {
+                    results.Add((path, null, "that file is not there any more"));
+                    continue;
+                }
+
+                if (!Extensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
+                {
+                    results.Add((path, null, $"only {string.Join(" and ", Extensions)} files can be imported"));
+                    continue;
+                }
+
+                await WaitForFileReadyAsync(path, token);
+
+                var stored = await _processor.ProcessAsync(path, token);
+                results.Add((path, stored, stored is null ? "nothing could be read out of it" : null));
+            }
+            catch (Exception ex)
+            {
+                SimpleLogger.Error($"Could not import '{path}'", ex);
+                results.Add((path, null, ex.Message));
+            }
+        }
+
+        return results;
+    }
+
+    /// <summary>
     /// Age is judged on the timestamp in the file name, so re-copying an old bundle into the
     /// folder does not make it look new.
     /// </summary>

@@ -46,6 +46,26 @@ public partial class MainWindow : Window
         }.Show();
     }
 
+    /// <summary>
+    /// Dropping bundles on the window imports them. The shortest path there is: no folder to find,
+    /// nothing to copy, no waiting for the watcher.
+    /// </summary>
+    private async void Window_Drop(object sender, DragEventArgs e)
+    {
+        if (DataContext is not ViewModels.MainViewModel viewModel) return;
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths) return;
+
+        e.Handled = true;
+        await viewModel.ImportPathsAsync(paths);
+    }
+
+    private void Window_DragOver(object sender, DragEventArgs e)
+    {
+        // Say up front whether the drop will do anything, rather than swallowing it silently.
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
     private void OnIoStateRequested(object? sender, ViewModels.MainViewModel.IoStateRequestArgs request)
     {
         if (DataContext is not ViewModels.MainViewModel viewModel) return;
