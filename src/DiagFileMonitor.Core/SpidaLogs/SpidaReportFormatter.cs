@@ -45,6 +45,8 @@ public static class SpidaReportFormatter
         if (knowledge is not null) AppendLastOperatorAction(text, knowledge);
         // Higher still when it fires: it is the complaint itself, not context for it.
         if (knowledge is not null) AppendCutNotTaken(text, knowledge.CutNotTaken);
+        // The machine says what it is waiting for. Whether it got it is the whole answer.
+        if (knowledge is not null) AppendWaitingOn(text, knowledge.WaitingOn);
         if (knowledge is not null) AppendMotorConfirm(text, knowledge);
         if (knowledge is not null) AppendDriveFaults(text, knowledge);
         AppendUnits(text, analysis);
@@ -404,6 +406,93 @@ public static class SpidaReportFormatter
         }
 
         AppendFiringAudit(text, hand);
+    }
+
+    /// <summary>
+    /// What the machine said it was waiting for, joined up with whether it got it.
+    /// <para>
+    /// From a real M21737 case. The log ended repeating "Waiting for Both Panel Height Servos in
+    /// position and PlateSupports Down". The report of the day showed that line and stopped, which
+    /// was true and useless. The answer was in the same file: the plate support input is logged at
+    /// one address, and every paired input on that machine has a partner two bits down on the
+    /// module below. The second plate support's input never changed once in the whole log.
+    /// </para>
+    /// </summary>
+    private static void AppendWaitingOn(StringBuilder text, WaitingOnFindings waiting)
+    {
+        if (!waiting.Any) return;
+
+        text.AppendLine();
+        text.AppendLine("WHAT IT SAID IT WAS WAITING FOR");
+        text.AppendLine(new string('-', 78));
+        text.AppendLine($"  {waiting.Tag}: \"{waiting.Message}\"");
+
+        var span = waiting.From is { } from && waiting.To is { } to && to > from
+            ? $" over {MachineCycle.Describe(to - from)}"
+            : string.Empty;
+
+        text.AppendLine($"  Said {waiting.Repeats} time(s){span}."
+                        + (waiting.StillWaitingAtTheEnd ? " The log ends still saying it." : string.Empty));
+        text.AppendLine();
+
+        if (waiting.Axes.Count > 0)
+        {
+            text.AppendLine("  The axes it names:");
+
+            foreach (var axis in waiting.Axes)
+            {
+                var verdict = axis.Ready ? "in position" : ">>> " + axis.State;
+                text.AppendLine($"    {axis.Name,-28} {verdict}"
+                                + (axis.Since is { } at ? $"   since {at:hh\\:mm\\:ss}" : string.Empty));
+            }
+
+            text.AppendLine();
+        }
+
+        if (waiting.Named.Count > 0)
+        {
+            text.AppendLine("  The inputs and outputs it names:");
+
+            foreach (var signal in waiting.Named)
+            {
+                var held = signal.Since is { } since
+                    ? $"since {since:hh\\:mm\\:ss}"
+                    : "never changed in this log";
+
+                text.AppendLine($"    {signal.Id.Name,-24} {signal.Id.Address,-22} "
+                                + $"{(signal.On ? "on " : ">>> OFF")}   {held}");
+            }
+
+            text.AppendLine();
+        }
+
+        foreach (var orphan in waiting.Named.Where(s => s.PartnerMissing))
+        {
+            text.AppendLine($"  >>> {orphan.Id.Name} is logged at one address only, {orphan.Id.Address}.");
+            text.AppendLine($"      This machine pairs its inputs one per side, so its partner would be");
+            text.AppendLine($"      {orphan.MissingPartnerAddress} - and that address never appears anywhere in this log.");
+            text.AppendLine("      A log records changes, so an input that never came on leaves no trace at all.");
+            text.AppendLine("      That is what a sensor stuck off looks like from here, and it fits a machine");
+            text.AppendLine("      waiting for something it says it has not got.");
+            text.AppendLine("      Check that sensor, its cable and its connector on the other side of the machine.");
+            text.AppendLine();
+        }
+
+        if (waiting.PairedExamples.Count > 0 && waiting.Named.Any(s => s.PartnerMissing))
+        {
+            text.AppendLine("      The pairs this machine does log, which is where that reading comes from:");
+
+            foreach (var pair in waiting.PairedExamples.Take(4))
+                text.AppendLine($"        {pair}");
+
+            text.AppendLine();
+        }
+
+        if (!waiting.SomethingIsUnsatisfied && waiting.Named.Count > 0)
+        {
+            text.AppendLine("  Everything it names was satisfied at that moment, so whatever held it up is not");
+            text.AppendLine("  in this list. Read the raw tail at the end of this report.");
+        }
     }
 
     /// <summary>
@@ -895,6 +984,24 @@ public static class SpidaReportFormatter
             leads.Add($"The machine's last act was {lastEvent.Tag} \"{lastEvent.Description}\" at "
                       + $"{lastEvent.Time:hh\\:mm\\:ss}{Age(lastEvent.Time)}. Start at the end of the log "
                       + "and work back.");
+        }
+
+        // A machine still saying what it wants when the log runs out, with something it named
+        // sitting unsatisfied. That is as close to the machine answering the question as it gets.
+        if (knowledge?.WaitingOn is { Any: true, StillWaitingAtTheEnd: true } waiting
+            && waiting.SomethingIsUnsatisfied)
+        {
+            var orphan = waiting.Named.FirstOrDefault(sig => sig.PartnerMissing);
+
+            var what = orphan is not null
+                ? $"{orphan.Id.Name} is logged at one address only and its partner "
+                  + $"{orphan.MissingPartnerAddress} never appears - check that sensor on the other side"
+                : waiting.NotOn.Count > 0
+                    ? $"{string.Join(", ", waiting.NotOn.Select(sig => sig.Id.Name))} was off"
+                    : $"{string.Join(", ", waiting.NotReady.Select(a => a.Name))} was not in position";
+
+            leads.Add($"The machine was still saying \"{waiting.Message}\" when the log ran out"
+                      + $"{Age(waiting.To)}, and {what}.");
         }
 
         // The machine put in position over and over with no cut. Above the motor checks because

@@ -74,6 +74,9 @@ public class KnowledgeFindings
     /// <summary>The machine driven into position with no cut following, over and over.</summary>
     public CutNotTakenFindings CutNotTaken { get; init; } = new();
 
+    /// <summary>What the machine said it was waiting for, and whether it got it.</summary>
+    public WaitingOnFindings WaitingOn { get; init; } = new();
+
     /// <summary>How the last step ended against how that step usually ends.</summary>
     public StepStoryFindings StepStory { get; init; } = new();
 
@@ -84,6 +87,7 @@ public class KnowledgeFindings
         || MotorConfirm.Any
         || TwoHandControl.Any
         || CutNotTaken.Any
+        || WaitingOn.Any
         || StepStory.Any
         || (Knowledge is not null
             && (MatchedFaults.Count > 0 || IssuesSeenInThisLog.Count > 0 || IssueHistoryForSerial.Count > 0
@@ -119,6 +123,7 @@ public static class KnowledgeAnnotator
         var twoHand = TwoHandControlCheck.Check(machineLog);
         var stepStory = StepOutcomeCheck.Check(machineLog);
         var cutNotTaken = CutNotTakenCheck.Check(machineLog);
+        var waitingOn = WaitingOnCheck.Check(machineLog);
 
         if (knowledge is null)
         {
@@ -131,7 +136,8 @@ public static class KnowledgeAnnotator
                 MotorConfirm = motorConfirm,
                 TwoHandControl = twoHand,
                 StepStory = stepStory,
-                CutNotTaken = cutNotTaken
+                CutNotTaken = cutNotTaken,
+                WaitingOn = waitingOn
             };
         }
 
@@ -197,7 +203,8 @@ public static class KnowledgeAnnotator
             MotorConfirm = motorConfirm,
             TwoHandControl = twoHand,
             StepStory = stepStory,
-            CutNotTaken = cutNotTaken
+            CutNotTaken = cutNotTaken,
+            WaitingOn = waitingOn
         };
     }
 

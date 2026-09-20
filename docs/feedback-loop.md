@@ -179,3 +179,70 @@ Whether cut mode `None` is *why* the PLC ignored the buttons. The correlation is
 this one log and that is all it is. The report says so in those words and puts it first on the
 list to check rather than stating it as fact. **Second sighting would make it inferred; a word
 from somebody who knows the PLC would make it confirmed.**
+
+## Case 3 - M21737, 21 Sep 2026: waiting for a plate support that never came down
+
+RakingWallExtruderV3DG at PlaceMakers Wiri. Verdict: **missed it**.
+
+The log ends repeating, 68 times over 26 minutes:
+
+```
+Extruder, Waiting for Both Panel Height Servos in position and PlateSupports Down'
+```
+
+v1.1 showed that line - the raw tail put it on the page, which is the v1.1 fix working - and then
+said nothing about it. The machine had named exactly what it wanted and the report did not go and
+look.
+
+### What the log actually says
+
+- **`PlateSupportDown` is logged once**, at `192.168.250.1-1.1`, and reads 1 from 07:49:29 on.
+- **Its partner never appears.** Every paired input on this machine is the same bit two lower on
+  the module below: `PlateClampUp` 1.8 / 0.10, `TrolleyTopClampOpen` 1.6 / 0.8,
+  `TrolleyBottomClampOpen` 1.4 / 0.6. So the partner of 1.1 is **0.3**, and `0.3` appears nowhere
+  in the bundle.
+- A log records **changes**. An input that never came on never appears at all - which is exactly
+  what the second plate support looks like from here, and exactly why a report that only reads
+  what is written could not see it.
+
+The support person got there by knowing the machine has two plate supports. The report can get
+there by reading the machine's own addressing.
+
+### What was built
+
+`WaitingOnCheck`, and the report section **WHAT IT SAID IT WAS WAITING FOR**.
+
+It takes the last "Waiting for ..." message, pulls the named things out of it, and reports the
+state of each one at that moment:
+
+- **Signals**, matched by name. Every word of the signal's name has to appear in the message,
+  allowing a plural - so "PlateSupports Down" finds `PlateSupportDown`, and `PlateClampUp` stays
+  out of a message about plate supports.
+- **Axes**, matched more loosely, because no wording joins "Panel Height Servos" to
+  `FloatingSideHeight`. One distinctive word is enough, with the words every axis shares - servo,
+  axis, motor, drive, status, node, side - excluded so `FloatingEjectServo` is not dragged in.
+- **The missing partner**, where the machine's own pairing offset can be derived from at least two
+  pairs that agree. No agreement, no guess.
+
+### Kept quiet where it should be
+
+Checked against three other logs:
+
+| Log | Last waiting message | Reported |
+|---|---|---|
+| M22215 saw | "waiting for clamps" (369×) | nothing - no signal by that name, and guessing would be worse |
+| M20716, 100k lines | "Waiting for Saw Blade Running" | nothing - no signal name matches |
+| AOR1694 | none | nothing |
+
+One real fix came out of the cross-check: the pattern was anchored at the start of the line and
+the common shape is `Step Condition, Waiting for X`, so it was missing 4,123 messages in one
+sample log.
+
+### Still unproven
+
+- **That 0.3 is really the second plate support.** The offset is derived from three pairs that
+  agree, which is good evidence and not a wiring diagram. The report says where the partner
+  *would* be and tells the reader to go and look.
+- **Deliberately conservative matching.** "Waiting for Saw Blade Running" ought to point at
+  `IO-SawMotor` and does not, because the words do not line up. Under-reporting beats pointing a
+  technician at the wrong sensor, but an I/O map would fix both this and the guess above.
