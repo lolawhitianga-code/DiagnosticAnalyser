@@ -59,7 +59,8 @@ public class DiagnosticAnalysisService
 
         // Machine.xml is the better source for the model; fall back to what the PLC reported.
         var knowledge = KnowledgeAnnotator.Annotate(
-            analysis, logs.MachineLog, bundle.MachineType, bundle.SerialNumber, logs.MachineConfigPath);
+            analysis, logs.MachineLog, bundle.MachineType, bundle.SerialNumber, logs.MachineConfigPath,
+            bundle.ExtractedPath);
 
         // What the operator wrote in SupportInfo.txt decides where the report points first.
         var complaint = ComplaintRouter.Route(bundle.SupportIssue, logs.ChangeLog, logs.MachineLog, bundle.MachineType);

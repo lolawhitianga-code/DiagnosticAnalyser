@@ -40,6 +40,9 @@ public static class SpidaReportFormatter
         // written up as a symptom.
         AppendWhatNormalLooksLike(text, analysis);
         AppendHowItEnded(text, analysis, file);
+        // Straight after the end of the log, because a machine still sitting on one step is the
+        // callout itself rather than something to notice halfway down a report.
+        if (knowledge is not null) AppendStuckStep(text, knowledge.StuckStep);
         // What the operator last asked for, and what the machine did about it. This goes high up
         // because on a hand-driven machine it is usually the answer.
         if (knowledge is not null) AppendLastOperatorAction(text, knowledge);
@@ -54,6 +57,7 @@ public static class SpidaReportFormatter
         AppendErrors(text, analysis);
         AppendChanges(text, analysis);
         if (knowledge is not null) KnowledgeReportFormatter.Append(text, knowledge);
+        if (knowledge is not null) AppendSides(text, knowledge.Sides);
         AppendWhereToLook(text, file, analysis, knowledge);
         AppendQuestions(text, analysis, knowledge);
         AppendRawTail(text, analysis);
@@ -305,6 +309,84 @@ public static class SpidaReportFormatter
         foreach (var entry in analysis.FinalEntries)
         {
             text.AppendLine($"      {entry.Display}");
+        }
+    }
+
+    /// <summary>
+    /// The machine sitting on one step with the clock running. Dwell, not frequency: a guard
+    /// that trips forty times a shift and clears in a fifth of a second each time is the machine
+    /// working, and the same message once with nothing moving four minutes later is the fault.
+    /// </summary>
+    private static void AppendStuckStep(StringBuilder text, StuckStep? stuck)
+    {
+        if (stuck is null || !stuck.WorthReporting) return;
+
+        text.AppendLine();
+        text.AppendLine("IT STOPPED ON ONE STEP AND STAYED THERE");
+        text.AppendLine($"  Step {stuck.Step}, reached at {stuck.ReachedAt:hh\\:mm\\:ss}, still there "
+                        + $"{MachineCycle.Describe(stuck.HeldFor)} later when the file was taken.");
+
+        if (stuck.Message.Length > 0)
+        {
+            text.AppendLine($"  It said this {stuck.RepeatsOfMessage} time(s) while it sat there, and nothing else:");
+            text.AppendLine($"      \"{stuck.Message}\"");
+        }
+
+        text.AppendLine();
+
+        if (stuck.FirstTimeToday)
+        {
+            text.AppendLine($"  {ReportText.Wrap($"The machine reached step {stuck.Step} once in this whole log - "
+                + "this once, at the end. It is a branch it does not normally take, so this is not "
+                + "something it has been living with all day.", 2)}");
+        }
+        else if (stuck.HeldFarTooLong)
+        {
+            text.AppendLine($"  {ReportText.Wrap($"It reached step {stuck.Step} {stuck.TimesReachedInLog} times today and "
+                + $"normally passes through in {MachineCycle.Describe(stuck.TypicalHold)}. This time it did not "
+                + "move on at all. The step is routine; sitting on it is not.", 2)}");
+        }
+
+        text.AppendLine();
+        text.AppendLine("  Worth asking:");
+        text.AppendLine("      - What was the operator looking at? The machine was waiting on something,");
+        text.AppendLine("        so did the screen say what, and did they do it?");
+        text.AppendLine("      - If it needs a button press to carry on, was it pressed? A condition that");
+        text.AppendLine("        never cleared and one nobody answered look the same in the log.");
+        text.AppendLine("      - Did it come right on its own afterwards, or did it need a power cycle?");
+    }
+
+    /// <summary>
+    /// Which side of the machine each output address is, where CloudLog/maint_data.json says.
+    /// That file is the only place in a bundle where an output carries its real name and its
+    /// side; MachineLog.txt records the same points as bare addresses with the side stripped.
+    /// </summary>
+    private static void AppendSides(StringBuilder text, SideFindings? sides)
+    {
+        if (sides is null || !sides.Any) return;
+
+        var usable = sides.Trustworthy.Where(r => r.Side != MachineSide.Unknown).ToList();
+        if (usable.Count == 0) return;
+
+        text.AppendLine();
+        text.AppendLine("WHICH SIDE EACH OUTPUT IS ON");
+        text.AppendLine($"  {ReportText.Wrap("Read from CloudLog/maint_data.json, which carries an hour of run time for "
+            + "every output under the machine's own name. Matching those run times back to the addresses in "
+            + "MachineLog.txt names them. Measured, not guessed.", 2)}");
+        text.AppendLine();
+
+        foreach (var r in usable.OrderBy(r => r.Side).ThenBy(r => r.MachineName, StringComparer.Ordinal))
+        {
+            text.AppendLine($"  {r.Id.Address,-22} {r.MachineName}");
+        }
+
+        if (sides.Ambiguous.Count > 0)
+        {
+            text.AppendLine();
+            text.AppendLine($"  {ReportText.Wrap($"{sides.Ambiguous.Count} more could not be told apart: both sides ran for "
+                + "exactly the same length of time in the counted hour, which is what you would expect of a machine "
+                + "clamping and releasing both sides together. Nothing separates them, so they are left unnamed "
+                + "rather than guessed at.", 2)}");
         }
     }
 

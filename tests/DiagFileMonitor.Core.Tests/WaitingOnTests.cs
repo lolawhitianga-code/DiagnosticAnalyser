@@ -188,9 +188,61 @@ public class MachineIoMapTests
     {
         var points = MachineIoMap.For("RakingWallExtruderV3DG");
 
-        Assert.Equal(75, points.Count);
-        Assert.Equal(39, points.Count(p => p.Kind == SignalKind.Input));
-        Assert.Equal(36, points.Count(p => p.Kind == SignalKind.Output));
+        // 75 from the M21737 log, plus the 8 the M21844 log exercised and it did not.
+        Assert.Equal(83, points.Count);
+        Assert.Equal(43, points.Count(p => p.Kind == SignalKind.Input));
+        Assert.Equal(40, points.Count(p => p.Kind == SignalKind.Output));
+        Assert.DoesNotContain(points.GroupBy(p => (p.Kind, p.Address)), g => g.Count() > 1);
+    }
+
+    /// <summary>
+    /// The sides that are set were measured. The rest are Unknown and must stay that way -
+    /// an Unknown side is the map saying it does not know, not an oversight to be filled in.
+    /// </summary>
+    [Fact]
+    public void OnlyCarriesASideWhereOneWasMeasured()
+    {
+        var points = MachineIoMap.For("RakingWallExtruderV3DG");
+
+        Assert.Equal(15, points.Count(p => p.Side != MachineSide.Unknown));
+
+        // Settled 25 times out of 25 by the machine's own "Fixed Product: False" messages.
+        Assert.Equal(MachineSide.FixedSide,
+            MachineIoMap.Find("RakingWallExtruderV3DG", SignalKind.Input, "PlatePresentSwitch")
+                .Single(p => p.Address == "192.168.250.1-4.2").Side);
+        Assert.Equal(MachineSide.FloatingSide,
+            MachineIoMap.Find("RakingWallExtruderV3DG", SignalKind.Input, "PlatePresentSwitch")
+                .Single(p => p.Address == "192.168.250.1-4.4").Side);
+    }
+
+    /// <summary>
+    /// Module 4 is not "lower bit is the fixed side". The gripper, plate clamp and upper gripper
+    /// pairs run that way and the horizontal stud clamp runs the other way, so a side read off a
+    /// neighbouring pair is a guess. Both of these came from maint_data.json, separately.
+    /// </summary>
+    [Fact]
+    public void TheSidesDoNotFollowABitOrder()
+    {
+        MachineSide Side(string address) =>
+            MachineIoMap.For("RakingWallExtruderV3DG")
+                .Single(p => p.Kind == SignalKind.Output && p.Address == address).Side;
+
+        Assert.Equal(MachineSide.FixedSide, Side("192.168.250.1-4.4"));    // PlateClamp, low bit
+        Assert.Equal(MachineSide.FloatingSide, Side("192.168.250.1-4.5"));
+        Assert.Equal(MachineSide.FloatingSide, Side("192.168.250.1-4.12")); // HorizStudClamp, reversed
+        Assert.Equal(MachineSide.FixedSide, Side("192.168.250.1-4.13"));
+    }
+
+    [Fact]
+    public void NamesAPointTheWayATechnicianWouldSayIt()
+    {
+        var fixedClamp = MachineIoMap.For("RakingWallExtruderV3DG")
+            .Single(p => p.Kind == SignalKind.Output && p.Address == "192.168.250.1-4.4");
+        var unsided = MachineIoMap.For("RakingWallExtruderV3DG")
+            .Single(p => p.Kind == SignalKind.Output && p.Address == "192.168.250.1-4.14");
+
+        Assert.Equal("IO-PlateClamp (fixed side, 192.168.250.1-4.4)", fixedClamp.Describe());
+        Assert.Equal("IO-TopStudClamp (192.168.250.1-4.14)", unsided.Describe());
     }
 
     [Fact]

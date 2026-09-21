@@ -1,15 +1,84 @@
 # Raked Wall Extruder V3 - I/O list
 
-Read from an **82,149 line M21737 MachineLog** covering **04:07 to 13:51 on 27 July 2026**
-- nine and a half hours of production and 38,447 I/O changes.
+Read from two machines:
 
-**75 points: 39 inputs, 36 outputs.** Addresses are `IP-module.bit`.
+- **M21737**, 82,149 lines, 04:07 to 13:51 on 27 July 2026 - 38,447 I/O changes.
+- **M21844** (PlaceMakers Wiri), 84,360 lines, 04:32 to 12:50 on 8 September 2026 - 40,405 I/O
+  changes.
 
-Confidence: **inferred**. One machine, one log, not checked against a wiring diagram. A
-point this machine did not use that day is not here.
+**83 points: 43 inputs, 40 outputs.** Addresses are `IP-module.bit`.
 
-**Which physical side each half of a pair is, is not known** - both sides act within the same
-millisecond, so nothing in the log attributes an address to the floating or the fixed side.
+Every point found on M21737 appears on M21844 **at the same address**, which is the only
+reason this is worth relying on. M21844 exercised 8 points M21737 never did (the gun-lift
+group, a second THNTD, and a Control Box input); those are listed at the bottom.
+
+Confidence: **inferred**. Two machines, two logs, still no wiring diagram. A point neither
+machine used on its day is not here.
+
+## Sides
+
+Fifteen points now carry a side. They were **measured, not guessed**, two different ways.
+
+**Inputs - the machine's own words.** When a plate is lost the machine writes
+`Lost product, revert and try again. Fixed Product: X Floating: Y`, which names the side.
+Across 25 of those messages on M21844, the side it named was always the one whose address was
+reading 0: `192.168.250.1-4.2` every time it said the fixed side, `4.4` for the floating side,
+and both when it said both. **25 out of 25.**
+
+**Outputs - CloudLog/maint_data.json.** That file, previously written off as never populated,
+is populated on both machines. It carries the current hour's on-count and on-time for every
+output **under its real name**: `FixedSide/PlateClamp`, `FloatingSide/UpperGripper`,
+`CommonIO/RackLock`. The on-times run to seven decimal places, so matching them back to the
+addresses in MachineLog.txt is a fingerprint match - the ones that landed came within a few
+hundredths of a second.
+
+It only separates a pair whose two halves ran for **measurably different** lengths of time in
+the counted hour. Twenty-six could not be separated: both sides clamped and released together
+all hour, so their on-times are identical and nothing distinguishes them. Those are left
+unnamed.
+
+**The sides do not follow a bit order.** Lower-bit-is-fixed holds for the gripper, plate clamp
+and upper gripper pairs in module 4, then breaks on the horizontal stud clamp, where `4.12` is
+the floating side and `4.13` the fixed. Reading a side off a neighbouring pair is a guess.
+
+| Address | Kind | Side |
+|---|---|---|
+| `192.168.250.1-4.2` | Input | Fixed (PlatePresentSwitch) |
+| `192.168.250.1-4.4` | Input | Floating (PlatePresentSwitch) |
+| `192.168.250.1-0.0` | Output | Fixed (PlatePresentBypass) |
+| `192.168.250.1-0.14` | Output | Fixed (StudPinUp2) |
+| `192.168.250.1-1.9` | Output | Floating (StudPinUp2) |
+| `192.168.250.1-4.4` | Output | Fixed (PlateClamp) |
+| `192.168.250.1-4.5` | Output | Floating (PlateClamp) |
+| `192.168.250.1-4.8` | Output | Fixed (UpperGripper) |
+| `192.168.250.1-4.9` | Output | Floating (UpperGripper) |
+| `192.168.250.1-4.10` | Output | Fixed (LowerGripper) |
+| `192.168.250.1-4.11` | Output | Floating (LowerGripper) |
+| `192.168.250.1-4.12` | Output | Floating (HorizStudClamp) |
+| `192.168.250.1-4.13` | Output | Fixed (HorizStudClamp) |
+| `192.168.250.1-0.1` | Output | Shared (RackLock) |
+| `192.168.250.1-1.5` | Output | Shared (SideClamp) |
+
+Note `192.168.250.1-4.2` and `4.4` appear as both an input and an output at different
+addresses in the two spaces. Inputs and outputs are separate address spaces, which is why a
+point is only ever identified by **(kind, name, address)** together.
+
+## The eight points M21844 added
+
+| Address | Kind | Name |
+|---|---|---|
+| `192.168.250.1-0.1` | Input | Control Box 1 |
+| `192.168.250.1-0.20` | Input | UpperGunLowerIsHigh |
+| `192.168.250.1-2.2` | Input | UpperGunLowerIsHigh |
+| `192.168.250.1-4.3` | Input | THNTD (second station) |
+| `192.168.250.1-0.2` | Output | IO-UpperGunLowerGoHigh |
+| `192.168.250.1-1.6` | Output | IO-UpperGunLowerGoHigh |
+| `192.168.250.1-0.3` | Output | IO-UpperGunUpperGoHigh |
+| `192.168.250.1-1.7` | Output | IO-UpperGunUpperGoHigh |
+
+`192.168.250.1-0.3` is worth a note. An earlier answer predicted the second `PlateSupportDown`
+**input** there by extrapolating a pairing offset. The real one is at `2.7`, and `0.3` is not
+an input at all - it is an output, `IO-UpperGunUpperGoHigh`.
 
 
 ## Inputs

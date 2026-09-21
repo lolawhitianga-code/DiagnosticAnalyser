@@ -80,6 +80,12 @@ public class KnowledgeFindings
     /// <summary>How the last step ended against how that step usually ends.</summary>
     public StepStoryFindings StepStory { get; init; } = new();
 
+    /// <summary>The step the machine was sitting on when the log ran out, where that is unusual.</summary>
+    public StuckStep? StuckStep { get; init; }
+
+    /// <summary>Output addresses named and sided from CloudLog/maint_data.json, where it is there.</summary>
+    public SideFindings? Sides { get; init; }
+
     public bool HasAnything =>
         // Drive faults stand on their own: they come from the drive, not the machine model, so
         // there is something to report even for a machine we have no notes for.
@@ -107,7 +113,8 @@ public static class KnowledgeAnnotator
         IReadOnlyList<MachineLogEntry> machineLog,
         string? machineModel,
         string? serialNumber,
-        string? machineConfigXmlPath = null)
+        string? machineConfigXmlPath = null,
+        string? bundleRoot = null)
     {
         var knowledge = MachineKnowledgeBase.Find(machineModel ?? analysis.MachineModelFromLog);
 
@@ -124,6 +131,14 @@ public static class KnowledgeAnnotator
         var stepStory = StepOutcomeCheck.Check(machineLog);
         var cutNotTaken = CutNotTakenCheck.Check(machineLog);
         var waitingOn = WaitingOnCheck.Check(machineLog, machineModel ?? analysis.MachineModelFromLog);
+        var stuck = StuckStepCheck.Check(machineLog);
+
+        // maint_data.json is the only thing in a bundle that names an output's side, so where the
+        // machine wrote one, the addresses in this log can be named.
+        var duties = MaintenanceCounters.Read(bundleRoot);
+        var sides = duties.Count > 0
+            ? IoSideResolver.Resolve(IoTimeline.Build(machineLog), duties)
+            : null;
 
         if (knowledge is null)
         {
@@ -137,7 +152,9 @@ public static class KnowledgeAnnotator
                 TwoHandControl = twoHand,
                 StepStory = stepStory,
                 CutNotTaken = cutNotTaken,
-                WaitingOn = waitingOn
+                WaitingOn = waitingOn,
+                StuckStep = stuck,
+                Sides = sides
             };
         }
 
@@ -204,7 +221,9 @@ public static class KnowledgeAnnotator
             TwoHandControl = twoHand,
             StepStory = stepStory,
             CutNotTaken = cutNotTaken,
-            WaitingOn = waitingOn
+            WaitingOn = waitingOn,
+            StuckStep = stuck,
+            Sides = sides
         };
     }
 
