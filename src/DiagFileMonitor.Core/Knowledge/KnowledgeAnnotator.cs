@@ -95,6 +95,10 @@ public class KnowledgeFindings
     /// </summary>
     public PlatformFinding Platform { get; init; } = new(ControlPlatform.Unknown, "not read", 0);
 
+    /// <summary>This machine's I/O held against the map for its model.</summary>
+    public IoMapFindings IoMap { get; init; } =
+        new(0, 0, 0, Array.Empty<AddressDisagreement>(), Array.Empty<SignalId>(), Array.Empty<SharedAddress>());
+
     /// <summary>Output addresses named and sided from CloudLog/maint_data.json, where it is there.</summary>
     public SideFindings? Sides { get; init; }
 
@@ -143,6 +147,8 @@ public static class KnowledgeAnnotator
         var stepStory = StepOutcomeCheck.Check(machineLog);
         var cutNotTaken = CutNotTakenCheck.Check(machineLog);
         var platform = ControlPlatformCheck.Detect(machineLog);
+        var timeline = IoTimeline.Build(machineLog);
+        var ioMap = IoMapComparison.Check(timeline, machineModel ?? analysis.MachineModelFromLog, platform.Platform);
         var waitingOn = WaitingOnCheck.Check(
             machineLog, machineModel ?? analysis.MachineModelFromLog, platform.Platform);
         var floatingHead = FloatingHeadCheck.Check(machineLog);
@@ -157,9 +163,7 @@ public static class KnowledgeAnnotator
         // maint_data.json is the only thing in a bundle that names an output's side, so where the
         // machine wrote one, the addresses in this log can be named.
         var duties = MaintenanceCounters.Read(bundleRoot);
-        var sides = duties.Count > 0
-            ? IoSideResolver.Resolve(IoTimeline.Build(machineLog), duties)
-            : null;
+        var sides = duties.Count > 0 ? IoSideResolver.Resolve(timeline, duties) : null;
 
         if (knowledge is null)
         {
@@ -178,6 +182,7 @@ public static class KnowledgeAnnotator
                 FloatingHead = floatingHead,
                 Guards = guards,
                 Platform = platform,
+                IoMap = ioMap,
                 Sides = sides
             };
         }
@@ -254,6 +259,7 @@ public static class KnowledgeAnnotator
             FloatingHead = floatingHead,
             Guards = guards,
             Platform = platform,
+            IoMap = ioMap,
             Sides = sides
         };
     }

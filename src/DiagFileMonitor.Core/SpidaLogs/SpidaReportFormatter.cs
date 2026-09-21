@@ -72,6 +72,7 @@ public static class SpidaReportFormatter
         AppendErrors(text, analysis);
         AppendChanges(text, analysis);
         if (knowledge is not null) KnowledgeReportFormatter.Append(text, knowledge);
+        if (knowledge is not null) AppendIoMapCheck(text, knowledge.IoMap);
         if (knowledge is not null) AppendSides(text, knowledge.Sides);
         AppendWhereToLook(text, file, analysis, knowledge);
         AppendQuestions(text, analysis, knowledge);
@@ -324,6 +325,57 @@ public static class SpidaReportFormatter
         foreach (var entry in analysis.FinalEntries)
         {
             text.AppendLine($"      {entry.Display}");
+        }
+    }
+
+    /// <summary>
+    /// This machine's I/O held against the map for its model. The map is addresses, and addresses
+    /// are what a technician walks up to, so a name sitting somewhere the map does not expect is
+    /// worth more than anything else in this section.
+    /// </summary>
+    private static void AppendIoMapCheck(StringBuilder text, IoMapFindings findings)
+    {
+        if (!findings.Checked && findings.SharedAddresses.Count == 0) return;
+
+        text.AppendLine();
+        text.AppendLine("THIS MACHINE AGAINST THE MODEL'S I/O MAP");
+
+        if (findings.Checked)
+        {
+            text.AppendLine($"  {findings.SeenHere} point(s) moved in this log; {findings.Confirmed} of them "
+                            + $"sit where the map for this model says, out of {findings.MapPoints} mapped.");
+        }
+
+        foreach (var clash in findings.Disagreements)
+        {
+            text.AppendLine();
+            text.AppendLine($"  >>> {ReportText.Wrap(clash.Describe() + ". Go by this log, not the map - "
+                + "machines of one model are not wired identically, and the map is the other machines.", 6)}");
+        }
+
+        if (findings.SharedAddresses.Count > 0)
+        {
+            text.AppendLine();
+            text.AppendLine("  The machine calls one address by more than one name:");
+            foreach (var shared in findings.SharedAddresses)
+            {
+                text.AppendLine($"      {shared.Address}  =  {string.Join("  /  ", shared.Names)}");
+            }
+            text.AppendLine($"  {ReportText.Wrap("That is one physical point with a label per job, not two points. "
+                + "Asking what an address is has more than one right answer here.", 2)}");
+        }
+
+        if (findings.NotInTheMap.Count > 0 && findings.Checked)
+        {
+            text.AppendLine();
+            text.AppendLine($"  {ReportText.Wrap($"{findings.NotInTheMap.Count} point(s) here are not in the model's "
+                + "map at all, which usually means an option fitted to this machine and not to the ones mapped:", 2)}");
+            foreach (var extra in findings.NotInTheMap.Take(12))
+            {
+                text.AppendLine($"      {extra.Address,-22} {extra.Name}");
+            }
+            if (findings.NotInTheMap.Count > 12)
+                text.AppendLine($"      ... and {findings.NotInTheMap.Count - 12} more");
         }
     }
 
