@@ -22,7 +22,14 @@ public enum ControlPlatform
     /// Addresses look like <c>COM7-4.5</c> and axes report under their own names, e.g.
     /// <c>FloatingSidePuller Status</c>. Seen on AOR1694.
     /// </summary>
-    SerialPort
+    SerialPort,
+
+    /// <summary>
+    /// Addresses carry a TCP prefix - <c>TCP192.168.50.2-3.17</c> - and axes report under their
+    /// own names, e.g. <c>Axis-InfeedFollower</c>. Confirmed as the CLX build: support named
+    /// M17311, a Tornado M500, as CLX and this is the shape its log writes.
+    /// </summary>
+    TcpAddressed
 }
 
 public record PlatformFinding(ControlPlatform Platform, string Evidence, int AddressesSeen)
@@ -33,6 +40,7 @@ public record PlatformFinding(ControlPlatform Platform, string Evidence, int Add
     {
         ControlPlatform.NetworkNodes => "network-addressed, axes report as numbered nodes",
         ControlPlatform.SerialPort => "serial-port addressed, axes report under their own names",
+        ControlPlatform.TcpAddressed => "TCP-addressed (CLX), axes report under their own names",
         _ => "not established from this log"
     };
 }
@@ -59,6 +67,9 @@ public static class ControlPlatformCheck
     private static readonly Regex SerialAddress = new(
         @"\(COM\d+-\d+\.\d+\)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static readonly Regex TcpAddress = new(
+        @"\(TCP\d{1,3}(\.\d{1,3}){3}-\d+\.\d+\)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private static readonly Regex NodeStatus = new(
         @"^Node\d+ Status$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
@@ -66,16 +77,23 @@ public static class ControlPlatformCheck
     {
         var network = 0;
         var serial = 0;
+        var tcp = 0;
         var nodes = 0;
 
         foreach (var entry in entries)
         {
-            if (NetworkAddress.IsMatch(entry.Description)) network++;
+            // TCP is checked first: its address contains a bare IP and would otherwise match.
+            if (TcpAddress.IsMatch(entry.Description)) tcp++;
+            else if (NetworkAddress.IsMatch(entry.Description)) network++;
             else if (SerialAddress.IsMatch(entry.Description)) serial++;
 
             if (entry.Category == MachineLogCategory.MotionEvent && NodeStatus.IsMatch(entry.Tag.Trim()))
                 nodes++;
         }
+
+        if (tcp > network && tcp > serial && tcp > 0)
+            return new PlatformFinding(
+                ControlPlatform.TcpAddressed, $"{tcp} TCP-prefixed addresses", tcp);
 
         if (network > serial && network > 0)
             return new PlatformFinding(
@@ -100,6 +118,7 @@ public static class ControlPlatformCheck
     public static ControlPlatform OfAddress(string address)
     {
         if (address.StartsWith("COM", StringComparison.OrdinalIgnoreCase)) return ControlPlatform.SerialPort;
+        if (address.StartsWith("TCP", StringComparison.OrdinalIgnoreCase)) return ControlPlatform.TcpAddressed;
 
         var dash = address.IndexOf('-');
         var head = dash > 0 ? address[..dash] : address;

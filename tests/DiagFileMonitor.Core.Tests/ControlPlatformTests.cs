@@ -61,3 +61,41 @@ public class ControlPlatformTests
     public void ReadsThePlatformOffAnAddress(string address, ControlPlatform expected) =>
         Assert.Equal(expected, ControlPlatformCheck.OfAddress(address));
 }
+
+public class TcpPlatformTests
+{
+    /// <summary>
+    /// M17311, a Tornado M500 that support named as the CLX build. Addresses carry a TCP prefix
+    /// and axes report under their own names, which is neither of the other two shapes.
+    /// </summary>
+    [Fact]
+    public void ReadsTheTcpAddressedPlatform()
+    {
+        var found = ControlPlatformCheck.Detect(MachineLogFile.Parse(new[]
+        {
+            "08:45:26.9052195,  OutputChange, IO-InfeedDriveSideClamp1Out,  Output (TCP192.168.50.2-3.17) Set On",
+            "08:45:26.9052195,  InputChange, FollowerDown,  Input (TCP192.168.50.2-15.5) Changed to 1",
+            "08:45:30.8522097,  MotionEvent, Axis-InfeedFollower,  Homing"
+        }));
+
+        Assert.Equal(ControlPlatform.TcpAddressed, found.Platform);
+        Assert.Equal(ControlPlatform.TcpAddressed, ControlPlatformCheck.OfAddress("TCP192.168.50.2-3.17"));
+    }
+
+    /// <summary>
+    /// A TCP address contains a bare IP, so it must not be mistaken for the network-addressed
+    /// platform - which would hand a Tornado the Raked Extruder's map.
+    /// </summary>
+    [Fact]
+    public void ATcpAddressIsNotReadAsABareNetworkAddress()
+    {
+        var found = ControlPlatformCheck.Detect(MachineLogFile.Parse(new[]
+        {
+            "08:45:26.0000000,  OutputChange, IO-Thing,  Output (TCP192.168.50.2-3.17) Set On",
+            "08:45:27.0000000,  OutputChange, IO-Thing2,  Output (TCP192.168.50.2-3.18) Set On"
+        }));
+
+        Assert.NotEqual(ControlPlatform.NetworkNodes, found.Platform);
+        Assert.Empty(MachineIoMap.For("RakingWallExtruderV3DG", ControlPlatform.TcpAddressed));
+    }
+}
