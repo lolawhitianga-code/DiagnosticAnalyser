@@ -181,30 +181,57 @@ public static class MachineIoMap
         new(SignalKind.Output, "IO-UpperGunUpperGoHigh", "192.168.250.1-1.7", 2, "192.168.250.1-0.3"),
     };
 
-    /// <summary>Models are matched as a prefix, so RakingWallExtruderV3DG finds the V3 list.</summary>
-    private static readonly (string Prefix, IReadOnlyList<KnownSignal> Points)[] ByModel =
+    /// <summary>
+    /// Models are matched as a prefix, so RakingWallExtruderV3DG finds the V3 list.
+    /// <para>
+    /// Keyed on the control platform as well, because every Spida model ships in two versions and
+    /// the addresses differ between them. Both V3 logs behind this list are network-addressed
+    /// machines; the same model on the serial-port platform has different addresses entirely and
+    /// is not mapped.
+    /// </para>
+    /// </summary>
+    private static readonly (string Prefix, ControlPlatform Platform, IReadOnlyList<KnownSignal> Points)[] ByModel =
     {
-        ("RakingWallExtruderV3", RakedWallExtruderV3),
-        ("RakedWallExtruderV3", RakedWallExtruderV3)
+        ("RakingWallExtruderV3", ControlPlatform.NetworkNodes, RakedWallExtruderV3),
+        ("RakedWallExtruderV3", ControlPlatform.NetworkNodes, RakedWallExtruderV3)
     };
 
-    /// <summary>What we know this model has, or nothing where we have never mapped one.</summary>
-    public static IReadOnlyList<KnownSignal> For(string? model)
+    /// <summary>
+    /// What we know this model has on this control platform, or nothing.
+    /// <para>
+    /// An unknown platform returns nothing on purpose. The map is addresses, and the right name
+    /// against the wrong address sends a technician to the wrong terminal - worse than saying
+    /// nothing, because it looks like an answer.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<KnownSignal> For(string? model, ControlPlatform platform)
     {
-        if (string.IsNullOrWhiteSpace(model)) return Array.Empty<KnownSignal>();
+        if (string.IsNullOrWhiteSpace(model) || platform == ControlPlatform.Unknown)
+            return Array.Empty<KnownSignal>();
 
-        foreach (var (prefix, points) in ByModel)
-            if (model.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        foreach (var (prefix, mapped, points) in ByModel)
+            if (mapped == platform && model.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 return points;
 
         return Array.Empty<KnownSignal>();
     }
 
+    /// <summary>Which platforms this model is mapped for, so a gap can be named rather than guessed at.</summary>
+    public static IReadOnlyList<ControlPlatform> PlatformsMapped(string? model) =>
+        string.IsNullOrWhiteSpace(model)
+            ? Array.Empty<ControlPlatform>()
+            : ByModel
+                .Where(m => model.StartsWith(m.Prefix, StringComparison.OrdinalIgnoreCase))
+                .Select(m => m.Platform)
+                .Distinct()
+                .ToList();
+
     /// <summary>
     /// The addresses this model uses for a named signal - both halves where it is paired.
     /// </summary>
-    public static IReadOnlyList<KnownSignal> Find(string? model, SignalKind kind, string name) =>
-        For(model)
+    public static IReadOnlyList<KnownSignal> Find(
+        string? model, ControlPlatform platform, SignalKind kind, string name) =>
+        For(model, platform)
             .Where(s => s.Kind == kind && s.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
             .ToList();
 }

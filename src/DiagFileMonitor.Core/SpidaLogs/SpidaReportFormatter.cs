@@ -33,6 +33,20 @@ public static class SpidaReportFormatter
             text.AppendLine($"MachineLog reports model: {fromLog}{(agrees ? string.Empty : "   <-- does not match Machine.xml")}");
         }
 
+        // Every model ships on two control systems with different addresses, so which one this
+        // is decides whether any I/O map may be applied at all.
+        if (knowledge?.Platform is { } platform)
+        {
+            text.AppendLine($"Control system: {platform.Describe()} ({platform.Evidence})");
+
+            if (!platform.Known)
+            {
+                text.AppendLine($"           !! {ReportText.Wrap("Which control system this is could not be read from "
+                    + "the log, so no I/O map has been applied. Addresses differ between the two versions and the "
+                    + "right name against the wrong address is worse than no answer.", 14)}");
+            }
+        }
+
         AppendOperatorText(text, file);
         if (complaint is not null) AppendComplaint(text, complaint);
         // What normal looks like comes before the end of the log is picked over. Reading the last

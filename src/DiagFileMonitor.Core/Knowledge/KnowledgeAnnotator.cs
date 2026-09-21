@@ -89,6 +89,12 @@ public class KnowledgeFindings
     /// <summary>What the machine's guards cost in time. Not faults - the price of not crashing.</summary>
     public GuardLedger Guards { get; init; } = new(Array.Empty<GuardStop>(), TimeSpan.Zero);
 
+    /// <summary>
+    /// Which control system this machine is built on. Every model ships in two versions with
+    /// different addresses, so nothing address-specific is applied until this is established.
+    /// </summary>
+    public PlatformFinding Platform { get; init; } = new(ControlPlatform.Unknown, "not read", 0);
+
     /// <summary>Output addresses named and sided from CloudLog/maint_data.json, where it is there.</summary>
     public SideFindings? Sides { get; init; }
 
@@ -136,7 +142,9 @@ public static class KnowledgeAnnotator
         var twoHand = TwoHandControlCheck.Check(machineLog);
         var stepStory = StepOutcomeCheck.Check(machineLog);
         var cutNotTaken = CutNotTakenCheck.Check(machineLog);
-        var waitingOn = WaitingOnCheck.Check(machineLog, machineModel ?? analysis.MachineModelFromLog);
+        var platform = ControlPlatformCheck.Detect(machineLog);
+        var waitingOn = WaitingOnCheck.Check(
+            machineLog, machineModel ?? analysis.MachineModelFromLog, platform.Platform);
         var floatingHead = FloatingHeadCheck.Check(machineLog);
         var guards = GuardStopLedger.Check(machineLog, floatingHead);
         var stuck = StuckStepCheck.Check(machineLog);
@@ -169,6 +177,7 @@ public static class KnowledgeAnnotator
                 StuckStep = stuck,
                 FloatingHead = floatingHead,
                 Guards = guards,
+                Platform = platform,
                 Sides = sides
             };
         }
@@ -244,6 +253,7 @@ public static class KnowledgeAnnotator
             StuckStep = stuck,
             FloatingHead = floatingHead,
             Guards = guards,
+            Platform = platform,
             Sides = sides
         };
     }

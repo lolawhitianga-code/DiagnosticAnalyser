@@ -106,7 +106,8 @@ public static class WaitingOnCheck
         @"[A-Z]+(?![a-z])|[A-Z][a-z]*|[a-z]+|\d+", RegexOptions.Compiled);
 
     public static WaitingOnFindings Check(
-        IReadOnlyList<MachineLogEntry> entries, string? machineModel = null)
+        IReadOnlyList<MachineLogEntry> entries, string? machineModel = null,
+        ControlPlatform platform = ControlPlatform.Unknown)
     {
         if (entries.Count == 0) return new WaitingOnFindings();
 
@@ -140,9 +141,9 @@ public static class WaitingOnCheck
             .Select(state =>
             {
                 var addresses = addressesPerName.GetValueOrDefault(state.Id.Name, new List<string>());
-                var mapped = MachineIoMap.Find(machineModel, state.Id.Kind, state.Id.Name);
+                var mapped = MachineIoMap.Find(machineModel, platform, state.Id.Kind, state.Id.Name);
                 var fromMap = mapped.Count > 0;
-                var partner = MissingPartner(machineModel, state.Id, addresses, pairing, timeline);
+                var partner = MissingPartner(machineModel, platform, state.Id, addresses, pairing, timeline);
 
                 return new WaitingSignal(
                     state.Id,
@@ -224,12 +225,12 @@ public static class WaitingOnCheck
     /// </para>
     /// </summary>
     private static string MissingPartner(
-        string? model, SignalId id, List<string> addressesHere,
+        string? model, ControlPlatform platform, SignalId id, List<string> addressesHere,
         (int Module, int Bit)? habit, IoTimeline timeline)
     {
         if (addressesHere.Count != 1) return string.Empty;
 
-        var known = MachineIoMap.Find(model, id.Kind, id.Name);
+        var known = MachineIoMap.Find(model, platform, id.Kind, id.Name);
 
         if (known.Count > 0)
         {
