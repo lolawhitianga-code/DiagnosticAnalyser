@@ -84,7 +84,7 @@ public class KnowledgeFindings
     public StuckStep? StuckStep { get; init; }
 
     /// <summary>Times the machine would not bring the floating head in, and whether that was routine.</summary>
-    public FloatingHeadFindings FloatingHead { get; init; } = new(Array.Empty<ObstructionEpisode>());
+    public FloatingHeadFindings FloatingHead { get; init; } = new(Array.Empty<ObstructionEpisode>(), TimeSpan.Zero);
 
     /// <summary>Output addresses named and sided from CloudLog/maint_data.json, where it is there.</summary>
     public SideFindings? Sides { get; init; }
@@ -139,7 +139,7 @@ public static class KnowledgeAnnotator
 
         // The floating head check knows why the machine is waiting and this one does not, so
         // where they are talking about the same wait, the one with the reason wins.
-        if (stuck is not null && floatingHead.Episodes.Any(e => e.LastComplaintAt >= stuck.ReachedAt))
+        if (stuck is not null && floatingHead.Episodes.Any(e => e.EndedAt >= stuck.ReachedAt))
             stuck = null;
 
         // maint_data.json is the only thing in a bundle that names an output's side, so where the

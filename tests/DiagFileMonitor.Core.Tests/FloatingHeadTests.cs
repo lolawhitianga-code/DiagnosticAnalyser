@@ -8,25 +8,31 @@ public class FloatingHeadTests
     private static FloatingHeadFindings Check(params string[] lines) =>
         FloatingHeadCheck.Check(MachineLogFile.Parse(lines));
 
+    /// <summary>
+    /// One wait, built the way the machine writes one: the sequencer polling 320/321 every
+    /// fraction of a second while it is blocked, then clearing through to 330.
+    /// </summary>
     private static string[] Wait(string at, int polls, string heightBefore, string? heightAfter)
     {
         var lines = new List<string>
         {
-            $"{heightBefore} lead-in placeholder"
+            $"09:00:00.0000000,  Other, FloatingSideHeight,  Move to : {heightBefore}"
         };
-        lines.Clear();
-        lines.Add($"09:00:00.0000000,  Other, FloatingSideHeight,  Move to : {heightBefore}");
+
         for (var i = 0; i < polls; i++)
         {
-            lines.Add($"{at}.{i:0000000},  Other, WallExtruderStep,  Step = 320");
-            lines.Add($"{at}.{i + 1:0000000},  Other, WallExtruderStep,  Step = 321");
-            lines.Add($"{at}.{i + 2:0000000},  Other, REv3,  Unsafe to move Floating Head please clear Obstacle Then Press THNTD");
+            lines.Add($"{at}.{i * 2:0000000},  Other, WallExtruderStep,  Step = 320");
+            lines.Add($"{at}.{i * 2 + 1:0000000},  Other, WallExtruderStep,  Step = 321");
+            lines.Add($"{at}.{i * 2 + 1:0000000},  Other, REv3,  Unsafe to move Floating Head please clear Obstacle Then Press THNTD");
         }
+
         if (heightAfter is not null)
         {
-            lines.Add("09:30:00.0000000,  Other, WallExtruderStep,  Step = 330");
-            lines.Add($"09:30:01.0000000,  Other, FloatingSideHeight,  Move to : {heightAfter}");
+            lines.Add($"{at}.9000000,  Other, WallExtruderStep,  Step = 330");
+            lines.Add($"{at}.9500000,  Other, FloatingSideHeight,  Move to : {heightAfter}");
         }
+
+        lines.Add("09:40:00.0000000,  Other, Eject,  Panel Complete");
         return lines.ToArray();
     }
 
@@ -44,7 +50,6 @@ public class FloatingHeadTests
         var episode = Assert.Single(findings.Episodes);
         Assert.True(episode.ExplainedByALowerPanel);
         Assert.Equal(-1000, episode.HeightChange);
-        Assert.Single(findings.Routine);
         Assert.Empty(findings.WorthALook);
     }
 
@@ -67,7 +72,7 @@ public class FloatingHeadTests
         var episode = Assert.Single(findings.WorthALook);
         Assert.False(episode.ExplainedByALowerPanel);
         Assert.Equal(1000, episode.HeightChange);
-        Assert.False(episode.SortedItselfOut);
+        Assert.True(episode.Lasted >= TimeSpan.FromMinutes(1));
     }
 
     /// <summary>
@@ -79,8 +84,52 @@ public class FloatingHeadTests
     {
         var findings = Check(Wait("09:10:00", 5, "2000", "3000"));
 
-        Assert.Single(findings.Routine);
         Assert.Empty(findings.WorthALook);
+    }
+
+    /// <summary>
+    /// The number support actually wants. This is a guard doing its job, not a fault, so what
+    /// matters is what it costs - and on both real V3 logs that is well under 1% of the shift.
+    /// </summary>
+    [Fact]
+    public void AddsUpTheTimeTheGuardCost()
+    {
+        var findings = Check(
+            "08:00:00.0000000,  Other, WallExtruderStep,  Step = 10",
+            "08:00:00.1000000,  Other, FloatingSideHeight,  Move to : 3000",
+            "08:10:00.0000000,  Other, WallExtruderStep,  Step = 321",
+            "08:10:00.1000000,  Other, REv3,  Unsafe to move Floating Head please clear Obstacle Then Press THNTD",
+            "08:10:30.0000000,  Other, WallExtruderStep,  Step = 330",
+            "08:10:31.0000000,  Other, FloatingSideHeight,  Move to : 2000",
+            "09:00:00.0000000,  Other, WallExtruderStep,  Step = 321",
+            "09:00:00.1000000,  Other, REv3,  Unsafe to move Floating Head please clear Obstacle Then Press THNTD",
+            "09:00:10.0000000,  Other, WallExtruderStep,  Step = 330",
+            "10:00:00.0000000,  Other, Eject,  Panel Complete");
+
+        Assert.Equal(2, findings.Episodes.Count);
+        Assert.Equal(TimeSpan.FromSeconds(40), findings.TotalTime);
+        Assert.Equal(TimeSpan.FromSeconds(30), findings.Longest);
+        Assert.Equal(40.0 / 7200, findings.ShareOfShift!.Value, 4);
+    }
+
+    /// <summary>
+    /// Step 0 is the operator taking it back to the start rather than clearing it. Worth
+    /// counting separately - it is the one outcome where the wait cost a cycle as well as time.
+    /// </summary>
+    [Fact]
+    public void CountsTheOnesTheOperatorGaveUpOn()
+    {
+        var findings = Check(
+            "05:00:00.0000000,  Other, FloatingSideHeight,  Move to : 2570",
+            "05:16:52.0000000,  Other, WallExtruderStep,  Step = 321",
+            "05:16:52.1000000,  Other, REv3,  Unsafe to move Floating Head please clear Obstacle Then Press THNTD",
+            "05:17:38.0000000,  Other, WallExtruderStep,  Step = 0",
+            "05:20:00.0000000,  Other, Eject,  Panel Complete");
+
+        var episode = Assert.Single(findings.Episodes);
+        Assert.True(episode.Abandoned);
+        Assert.False(episode.Cleared);
+        Assert.Equal(1, findings.AbandonedCount);
     }
 
     /// <summary>
@@ -116,7 +165,7 @@ public class FloatingHeadTests
         Assert.Equal(3, episode.Complaints);
         Assert.True(episode.Lasted > TimeSpan.FromMinutes(3));
         Assert.True(episode.LogEndedDuringIt);
-        Assert.False(episode.ClearedAndCarriedOn);
+        Assert.False(episode.Cleared);
     }
 
     /// <summary>
@@ -134,7 +183,7 @@ public class FloatingHeadTests
 
         var episode = Assert.Single(findings.Episodes);
         Assert.Null(episode.HeightChange);
-        Assert.True(episode.SortedItselfOut);
+        Assert.True(episode.Cleared);
         Assert.Empty(findings.WorthALook);
     }
 

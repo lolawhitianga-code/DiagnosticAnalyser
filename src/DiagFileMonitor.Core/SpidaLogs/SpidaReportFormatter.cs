@@ -314,61 +314,67 @@ public static class SpidaReportFormatter
     }
 
     /// <summary>
-    /// The floating head obstruction, read with the panel height beside it. On its own the
-    /// message means very little - going from a taller panel to a shorter one it is the machine
-    /// doing exactly what it should, and writing it up as a fault sends a technician to a site
-    /// where nothing is broken.
+    /// What the floating head obstruction guard cost in time.
+    /// <para>
+    /// This is not written up as a fault, because it is not one. The laser stops the head before
+    /// it drives into whatever is in front of it - almost always the pieces set by hand for a
+    /// taller panel, still standing there when the next panel is shorter. Time spent clearing
+    /// that is time well spent against the machine crashing into it. So the report gives the
+    /// cost and leaves it at that.
+    /// </para>
     /// </summary>
     private static void AppendFloatingHead(StringBuilder text, FloatingHeadFindings findings)
     {
         if (!findings.Any) return;
 
         text.AppendLine();
-        text.AppendLine("FLOATING HEAD WOULD NOT COME IN");
-        text.AppendLine($"  {ReportText.Wrap("Going from a taller panel to a shorter one, the head has to come in "
-            + "and the pieces set by hand for the taller panel are still in the way. The laser sees them and the "
-            + "machine stops rather than driving into them. The operator moves them and presses THNTD. That is "
-            + "normal - so what matters is whether the panel height actually dropped.", 2)}");
+        text.AppendLine("FLOATING HEAD OBSTRUCTION - WHAT IT COST IN TIME");
+        text.AppendLine($"  {ReportText.Wrap("The laser stopping the head before it drives into something. Going from a "
+            + "taller panel to a shorter one, the pieces set by hand for the taller one are still in the way, and the "
+            + "operator moves them and presses THNTD. This is the guard working - far better than the machine "
+            + "crashing into what it saw. So this is a cost to know about, not a fault to fix.", 2)}");
         text.AppendLine();
 
-        if (findings.Routine.Count > 0)
+        var share = findings.ShareOfShift is { } fraction ? $" - {fraction:P2} of the log" : string.Empty;
+        var waits = findings.Episodes.Count == 1 ? "1 wait" : $"{findings.Episodes.Count} waits";
+        text.AppendLine($"  {waits}, {MachineCycle.Describe(findings.TotalTime)} in total{share}.");
+
+        if (findings.LongestEpisode is { } worst && findings.Episodes.Count > 1)
         {
-            text.AppendLine($"  {ReportText.Wrap($"{findings.Routine.Count} time(s): the next panel was shorter, or "
-                + "it cleared straight away and the machine carried on. Normal, nothing to chase.", 2)}");
+            var why = worst.HeightChange is { } change && change < 0
+                ? $" (head coming in {Math.Abs(change):F0} mm)"
+                : string.Empty;
+            text.AppendLine($"  Longest was {MachineCycle.Describe(worst.Lasted)} at {worst.StartedAt:hh\\:mm\\:ss}{why}.");
+        }
+
+        if (findings.AbandonedCount > 0)
+        {
+            text.AppendLine($"  {ReportText.Wrap($"{findings.AbandonedCount} of them went back to step 0 rather than "
+                + "being cleared - the operator gave up on it and started again.", 2)}");
         }
 
         foreach (var episode in findings.WorthALook)
         {
             text.AppendLine();
-            text.AppendLine($"  {episode.StartedAt:hh\\:mm\\:ss} - said it {episode.Complaints} time(s) over "
+            text.AppendLine($"  {episode.StartedAt:hh\\:mm\\:ss} - worth a second look. Held it up for "
                             + $"{MachineCycle.Describe(episode.Lasted)}.");
 
             if (episode.HeightChange is { } change)
             {
                 text.AppendLine($"      Floating head target went {episode.HeightBefore:F0} -> {episode.HeightAfter:F0} "
-                                + $"({change:+0;-0} mm).");
+                                + $"({change:+0;-0} mm), so a lower panel does not explain this one.");
             }
             else if (episode.HeightBefore is { } before)
             {
-                text.AppendLine($"      {ReportText.Wrap($"Floating head was last sent to {before:F0}. It was never "
-                    + "given a new target, so there is nothing to say how far it was being asked to come in.", 6)}");
+                text.AppendLine($"      {ReportText.Wrap($"Floating head was last sent to {before:F0} and was never given "
+                    + "a new target, so there is nothing to say how far it was being asked to come in.", 6)}");
             }
 
             if (episode.LogEndedDuringIt)
             {
                 text.AppendLine($"      {ReportText.Wrap("The log ends here, so we cannot see it clear. That is not the "
-                    + "same as it never clearing - ask the operator whether they moved the pieces and pressed THNTD, "
-                    + "and whether it carried on.", 6)}");
-            }
-            else if (!episode.ClearedAndCarriedOn)
-            {
-                text.AppendLine("      It did not get past this into the rest of the eject sequence.");
-            }
-
-            if (!episode.ExplainedByALowerPanel && episode.HeightChange is not null)
-            {
-                text.AppendLine($"      {ReportText.Wrap("No height reduction behind this one, which is the case worth "
-                    + "asking about: if the operator says there was nothing in the way, look at the laser.", 6)}");
+                    + "same as it never clearing - ask whether the operator moved the pieces, pressed THNTD, and "
+                    + "whether it carried on.", 6)}");
             }
         }
     }

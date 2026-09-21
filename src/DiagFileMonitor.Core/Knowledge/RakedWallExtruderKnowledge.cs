@@ -76,20 +76,22 @@ public static class RakedWallExtruderKnowledge
             {
                 Match = "Unsafe to move Floating Head",
                 Meaning =
-                    "NORMAL when the next panel is shorter than the last one. The floating head "
-                    + "has to come in to the new height, and the pieces the operator set by hand "
-                    + "for the taller panel are still standing in its way, so the laser sees them "
-                    + "and the machine stops rather than driving into them. The operator clears "
-                    + "the pieces and presses THNTD. Do not write this up as a fault on its own - "
-                    + "check the floating head height either side of it first.",
+                    "A GUARD WORKING, not a fault. Going from a taller panel to a shorter one the "
+                    + "floating head has to come in, and the pieces the operator set by hand for "
+                    + "the taller panel are still standing in its way. The laser sees them and the "
+                    + "machine stops rather than driving into them; the operator moves them and "
+                    + "presses THNTD. Time spent clearing this beats the machine crashing into "
+                    + "what the laser saw, which is a safety matter - so the thing worth reporting "
+                    + "is how much time goes into it, not that it happened. On both V3 logs we "
+                    + "have it comes to under 1% of the shift.",
                 WhatToCheck = new[]
                 {
-                    "Did the floating head height target drop across it? A drop means this is the "
-                        + "machine doing its job and nothing needs fixing.",
-                    "Did it get through to step 330 afterwards? That is the operator having "
-                        + "cleared it.",
-                    "Only worth chasing if there was NO height reduction, or if it never cleared "
-                        + "and the operator says there was nothing there to move."
+                    "How much time did it cost across the log? That is the number to quote.",
+                    "Did the floating head height target drop across it? A drop means nothing "
+                        + "needs fixing at all.",
+                    "Did it get through to step 330, or did the operator take it back to step 0?",
+                    "Only worth a second look if there was NO height reduction and it held the "
+                        + "machine up for over a minute."
                 },
                 Confidence = Confidence.Confirmed
             },

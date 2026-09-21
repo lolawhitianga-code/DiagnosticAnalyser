@@ -368,7 +368,20 @@ carrying an Omron alarm yet**, so that scan may never fire — send one if you f
 
 ## "Unsafe to move Floating Head please clear Obstacle in front of laser"
 
-**Usually not a fault.** Confirmed by Spida support, September 2026.
+**Not a fault. A guard working.** Confirmed by Spida support, September 2026.
+
+We would far rather spend time clearing this than have the machine crash into whatever the
+laser saw - that is a safety matter. So this is a **nice-to-have error**, and the only thing
+worth reporting about it is **how much time goes into resolving it**.
+
+Measured on the two V3 logs we have:
+
+| Machine | Shift | Waits | Time lost | Share |
+|---|---|---|---|---|
+| M21737 | 9.7 h | 6 | 2.7 min | 0.45% |
+| M21844 | 8.3 h | 1 | 3.8 min | 0.77% |
+
+Under 1% of a shift on both. Worth quoting to a customer who asks about it.
 
 Going from a taller panel to a shorter one, the floating head has to come **in** to the new
 height. The pieces the operator set by hand for the taller panel are still standing there, so the
@@ -387,11 +400,13 @@ Two things make this easy to misread in a log:
 On an M21737 log, all six waits sat across a height reduction - from 52 mm to 1.9 m - and every
 one of them cleared through to step 330.
 
-So the question is never "did this message appear". It is:
+So the question is never "did this message appear", nor even "is it a problem". It is **what did
+it cost**, and then, for the odd one:
 
 1. Did the floating head height target **drop** across it? A drop means nothing needs fixing.
-2. Did it get through to **step 330** afterwards?
-3. Only if there was **no height reduction**, or it never cleared and the operator says there was
-   nothing there to move, is the laser itself worth looking at.
+2. Did it get through to **step 330** afterwards, or did the operator take it back to step 0?
+3. Only if there was **no height reduction** and it held the machine up for over a minute, or the
+   log ends inside it, is it worth a second look at all.
 
-`FloatingHeadCheck` in the app does exactly this, and `StuckStepCheck` stays quiet when it fires.
+`FloatingHeadCheck` in the app reports the time cost first and the exceptions second, and
+`StuckStepCheck` stays quiet when it fires.
