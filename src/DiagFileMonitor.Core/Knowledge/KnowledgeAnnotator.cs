@@ -123,7 +123,7 @@ public static class KnowledgeAnnotator
         var twoHand = TwoHandControlCheck.Check(machineLog);
         var stepStory = StepOutcomeCheck.Check(machineLog);
         var cutNotTaken = CutNotTakenCheck.Check(machineLog);
-        var waitingOn = WaitingOnCheck.Check(machineLog);
+        var waitingOn = WaitingOnCheck.Check(machineLog, machineModel ?? analysis.MachineModelFromLog);
 
         if (knowledge is null)
         {

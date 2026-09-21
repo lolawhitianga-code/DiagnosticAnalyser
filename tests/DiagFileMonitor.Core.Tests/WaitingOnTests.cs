@@ -177,3 +177,76 @@ public class WaitingOnTests
         Assert.Equal(expected, WaitingOnCheck.Mentions(message, signal));
     }
 }
+
+/// <summary>
+/// The I/O map, read off an 82,149 line M21737 log covering nine and a half hours of production.
+/// </summary>
+public class MachineIoMapTests
+{
+    [Fact]
+    public void KnowsTheRakedWallExtruderV3()
+    {
+        var points = MachineIoMap.For("RakingWallExtruderV3DG");
+
+        Assert.Equal(75, points.Count);
+        Assert.Equal(39, points.Count(p => p.Kind == SignalKind.Input));
+        Assert.Equal(36, points.Count(p => p.Kind == SignalKind.Output));
+    }
+
+    [Fact]
+    public void KnowsBothPlateSupportDownInputs()
+    {
+        // The whole point. The short M21737 log only ever showed 1.1, and the second one at 2.7
+        // never changed - which is what a plate support that never came down looks like.
+        var found = MachineIoMap.Find("RakingWallExtruderV3DG", SignalKind.Input, "PlateSupportDown");
+
+        Assert.Equal(2, found.Count);
+        Assert.Equal(new[] { "192.168.250.1-1.1", "192.168.250.1-2.7" },
+            found.Select(p => p.Address).OrderBy(a => a));
+        Assert.All(found, p => Assert.True(p.IsPaired));
+    }
+
+    [Fact]
+    public void ThePairingOffsetIsNotOneNumber()
+    {
+        // Why guessing an address from the log's own pairs was wrong: modules 0 and 1 pair two
+        // bits apart, module 1 pairs eleven apart internally, module 4 pairs adjacent.
+        string Partner(SignalKind kind, string name, string address) =>
+            MachineIoMap.Find("RakingWallExtruderV3DG", kind, name)
+                .Single(p => p.Address == address).PartnerAddress;
+
+        Assert.Equal("192.168.250.1-1.8", Partner(SignalKind.Input, "PlateClampUp", "192.168.250.1-0.10"));
+        Assert.Equal("192.168.250.1-2.7", Partner(SignalKind.Input, "PlateSupportDown", "192.168.250.1-1.1"));
+        Assert.Equal("192.168.250.1-4.15", Partner(SignalKind.Output, "IO-TopStudClamp", "192.168.250.1-4.14"));
+    }
+
+    [Fact]
+    public void AModelWeHaveNeverMappedGetsNothingRatherThanAGuess()
+    {
+        Assert.Empty(MachineIoMap.For("SprintM600"));
+        Assert.Empty(MachineIoMap.For(null));
+        Assert.Empty(MachineIoMap.Find("SprintM600", SignalKind.Input, "PlateSupportDown"));
+    }
+
+    [Fact]
+    public void TheMapAnswersTheMissingPartnerRatherThanTheOffsetGuess()
+    {
+        // Same short log as the case, now read against the model's real map. Before this the
+        // derived offset said 192.168.250.1-0.3, which is not used on this machine at all.
+        var findings = WaitingOnCheck.Check(MachineLogFile.Parse(new[]
+        {
+            "07:47:15.190,  InputChange, TrolleyBottomClampOpen,  Input (192.168.250.1-1.4) Changed to 1",
+            "07:47:15.190,  InputChange, TrolleyBottomClampOpen,  Input (192.168.250.1-0.6) Changed to 1",
+            "07:48:07.903,  InputChange, PlateClampUp,  Input (192.168.250.1-1.8) Changed to 1",
+            "07:48:07.903,  InputChange, PlateClampUp,  Input (192.168.250.1-0.10) Changed to 1",
+            "07:49:29.628,  InputChange, PlateSupportDown,  Input (192.168.250.1-1.1) Changed to 1",
+            "07:58:26.902,  Other, Extruder,  Waiting for Both Panel Height Servos in position and PlateSupports Down'"
+        }), "RakingWallExtruderV3DG");
+
+        var signal = Assert.Single(findings.Named);
+
+        Assert.True(signal.PartnerMissing);
+        Assert.True(signal.PartnerFromTheMap);
+        Assert.Equal("192.168.250.1-2.7", signal.MissingPartnerAddress);
+    }
+}

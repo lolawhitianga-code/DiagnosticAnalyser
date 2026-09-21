@@ -10,14 +10,15 @@ public record WaitingSignal(
     StateSource Source,
     TimeSpan? Since,
     int AddressesForThisName,
-    string MissingPartnerAddress)
+    string MissingPartnerAddress,
+    bool PartnerFromTheMap)
 {
     public string OnOff => On ? "on" : "off";
 
     /// <summary>
-    /// This machine pairs its confirmation inputs one per side, and this one has no partner in
-    /// the log. An input that never changes never appears in a change log, so the partner being
-    /// absent is exactly what a sensor that never came on looks like.
+    /// This machine has a second one of these and it never spoke in this log. An input that never
+    /// changes never appears in a change log, so the partner being absent is exactly what a sensor
+    /// that never came on looks like.
     /// </summary>
     public bool PartnerMissing => MissingPartnerAddress.Length > 0;
 }
@@ -104,7 +105,8 @@ public static class WaitingOnCheck
     private static readonly Regex Words = new(
         @"[A-Z]+(?![a-z])|[A-Z][a-z]*|[a-z]+|\d+", RegexOptions.Compiled);
 
-    public static WaitingOnFindings Check(IReadOnlyList<MachineLogEntry> entries)
+    public static WaitingOnFindings Check(
+        IReadOnlyList<MachineLogEntry> entries, string? machineModel = null)
     {
         if (entries.Count == 0) return new WaitingOnFindings();
 
@@ -138,6 +140,9 @@ public static class WaitingOnCheck
             .Select(state =>
             {
                 var addresses = addressesPerName.GetValueOrDefault(state.Id.Name, new List<string>());
+                var mapped = MachineIoMap.Find(machineModel, state.Id.Kind, state.Id.Name);
+                var fromMap = mapped.Count > 0;
+                var partner = MissingPartner(machineModel, state.Id, addresses, pairing, timeline);
 
                 return new WaitingSignal(
                     state.Id,
@@ -145,7 +150,8 @@ public static class WaitingOnCheck
                     state.Source,
                     state.Since,
                     addresses.Count,
-                    addresses.Count == 1 ? PartnerOf(state.Id.Address, pairing, timeline) : string.Empty);
+                    partner,
+                    fromMap);
             })
             .OrderBy(s => s.On)
             .ThenBy(s => s.Id.Name, StringComparer.OrdinalIgnoreCase)
@@ -204,7 +210,43 @@ public static class WaitingOnCheck
         return agreed.Count == 1 ? agreed[0] : null;
     }
 
-    /// <summary>Where this signal's partner would be, if the machine has one and it never spoke.</summary>
+    /// <summary>
+    /// The address of this signal's other half, where the machine has one and it never spoke in
+    /// this log.
+    /// <para>
+    /// The model's I/O map is asked first and believed absolutely, because it was read off a log
+    /// long enough to exercise the whole machine. Only where there is no map does this fall back
+    /// to the offset the log's own pairs agree on - and that fallback is a guess. On the M21737
+    /// case it predicted 192.168.250.1-0.3 for the second plate support from three pairs that
+    /// happened to share an offset. The real address is 192.168.250.1-2.7, and 0.3 is not used
+    /// at all. The pairing offset on these machines is not one number: modules 0 and 1 pair two
+    /// bits apart, module 1 pairs eleven bits apart internally, and module 4 pairs adjacent.
+    /// </para>
+    /// </summary>
+    private static string MissingPartner(
+        string? model, SignalId id, List<string> addressesHere,
+        (int Module, int Bit)? habit, IoTimeline timeline)
+    {
+        if (addressesHere.Count != 1) return string.Empty;
+
+        var known = MachineIoMap.Find(model, id.Kind, id.Name);
+
+        if (known.Count > 0)
+        {
+            // The map knows this machine. Anything it lists that did not move here is the answer.
+            return known
+                .Select(point => point.Address)
+                .FirstOrDefault(address => !addressesHere.Contains(address, StringComparer.OrdinalIgnoreCase))
+                ?? string.Empty;
+        }
+
+        return PartnerOf(id.Address, habit, timeline);
+    }
+
+    /// <summary>
+    /// Where a partner would be if this machine used one offset throughout. A fallback for a
+    /// model we have never mapped, and a guess - see <see cref="MissingPartner"/>.
+    /// </summary>
     private static string PartnerOf(string address, (int Module, int Bit)? habit, IoTimeline timeline)
     {
         if (habit is not { } offset || Address(address) is not { } here) return string.Empty;

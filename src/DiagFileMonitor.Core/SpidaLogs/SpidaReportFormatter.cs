@@ -469,8 +469,14 @@ public static class SpidaReportFormatter
         foreach (var orphan in waiting.Named.Where(s => s.PartnerMissing))
         {
             text.AppendLine($"  >>> {orphan.Id.Name} is logged at one address only, {orphan.Id.Address}.");
-            text.AppendLine($"      This machine pairs its inputs one per side, so its partner would be");
-            text.AppendLine($"      {orphan.MissingPartnerAddress} - and that address never appears anywhere in this log.");
+
+            // Where the second address comes from changes how much it should be trusted, so say.
+            text.AppendLine(orphan.PartnerFromTheMap
+                ? $"      This model is known to have a second one at {orphan.MissingPartnerAddress}, and that"
+                : $"      This machine pairs its inputs one per side, so its partner would be"
+                  + $" {orphan.MissingPartnerAddress} - and that");
+
+            text.AppendLine("      address never appears anywhere in this log.");
             text.AppendLine("      A log records changes, so an input that never came on leaves no trace at all.");
             text.AppendLine("      That is what a sensor stuck off looks like from here, and it fits a machine");
             text.AppendLine("      waiting for something it says it has not got.");
@@ -478,7 +484,9 @@ public static class SpidaReportFormatter
             text.AppendLine();
         }
 
-        if (waiting.PairedExamples.Count > 0 && waiting.Named.Any(s => s.PartnerMissing))
+        // Only worth showing the working when the working is what produced the answer.
+        if (waiting.PairedExamples.Count > 0
+            && waiting.Named.Any(s => s.PartnerMissing && !s.PartnerFromTheMap))
         {
             text.AppendLine("      The pairs this machine does log, which is where that reading comes from:");
 
