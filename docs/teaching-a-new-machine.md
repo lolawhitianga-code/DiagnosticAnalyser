@@ -48,33 +48,83 @@ quickly and cheaply, and let the files do the rest.
 
 ---
 
-## Part 2 - Where the fleet stands
+## Part 2 - The fleet, and the size of the job
 
-| Model | I/O map | Fault notes | Serials seen | Good enough? |
+Fourteen families, and **every one ships in a CLX and an Omron version with different node
+addresses**. That is 28 cells to fill, not 14.
+
+| # | Family | I/O map | Fault notes | Seen |
 |---|---|---|---|---|
-| RakingWallExtruderV3DG | 83 points, 15 sided | 16 faults + 3 guards | 7 | Yes, for now |
-| TornadoM500 | none | 12 faults | 1 | Partly - no I/O, one machine |
-| WallExtruder (plain) | none | none | - | No |
-| FastFramer | none | none | - | No |
-| TornadoM450 | none | none | - | No |
-| Anything else | - | - | - | Tell me it exists |
+| 1 | Sprint M600 | - | - | - |
+| 2 | Component Nailer V1 | - | - | - |
+| 3 | Component Nailer V2 | - | - | AOR1613 (bundle only) |
+| 4 | Component Maker | - | - | - |
+| 5 | Wall Extruder DG | - | - | - |
+| 6 | Wall Extruder MG | - | - | - |
+| 7 | Raked Wall Extruder V1 | - | - | - |
+| 8 | Raked Wall Extruder V2 | - | - | AOR1694 (serial-port) |
+| 9 | **Raked Wall Extruder V3** | **83 points, network-addressed** | **16 faults + 3 guards** | M21737, M21844 + 5 |
+| 10 | Rapid Stop | - | - | - |
+| 11 | **Tornado M500** | - | **12 faults** | M20421 |
+| 12 | Wall Sheather | - | - | - |
+| 13 | Puck Table | - | - | - |
+| 14 | Nocking Station | - | - | - |
+| 15 | Apollo | - | - | - |
 
-The app also learns I/O per serial by itself from every bundle that arrives, so the per-machine
-picture fills in on its own. What it cannot do on its own is know what any of it **means**.
+(AOR1694 reports itself as `RakingWallExtruderDG` - which of V1 or V2 that is, I do not know.)
 
----
+**So: 1 cell of 28 is properly done, and 1 more is half done.**
+
+### The two control systems
+
+They are already distinguishable in the bundles, two independent ways that have always agreed:
+
+| | Addresses | Axis status lines | Seen on |
+|---|---|---|---|
+| Network-addressed | `192.168.250.1-4.2` | `Node0 Status` … `Node5 Status` | M20716, M21737, M21844 |
+| Serial-port | `COM7-6.5` | `FloatingSidePuller Status` - by name | AOR1694 |
+
+The app now reads this off the log and **refuses to apply an I/O map from the wrong platform**,
+or from any platform when it cannot tell. Before this, a V3 on the other control system would
+have been handed these addresses - the right signal name against the wrong terminal.
+
+**One thing I need from you:** which of those two is the CLX and which is the Omron? The evidence
+leans one way, but naming it from a lean is exactly what put the M21737 address two bits and a
+module away from the real one. It is a one-line change once you say.
+
+### A bonus, if the platforms line up
+
+The serial-port machines **name their axes**; the network ones only number them (`Node0`…
+`Node5`). If the same physical axes sit in the same order on both versions of a model, a
+serial-port log would name the nodes for its network-addressed twin. That has been on the
+unproven list since the start and I could never tie it down - because the answer was on the other
+platform all along.
+
+I am not going to assume it. But a matched pair of logs - same family, one of each control
+system - would settle it, and would be worth more than either log on its own.
+
+### Where to start
+
+Twenty-eight cells is a lot, so the order matters more than it did. What I need from you first
+is not files, it is a ranking:
+
+> Of those fourteen, which three or four generate the most support calls? And for each, is it
+> mostly CLX or mostly Omron in the field?
+
+Then we do those, properly, one at a time. A model with a real I/O map, a guard list and a normal
+baseline is worth more than fourteen models with a fault list each.
 
 ## Part 3 - The steps
 
-### Step 0 - Tell me the fleet (once, 5 minutes)
+### Step 0 - Rank them (done the list; now the order)
 
-Before anything else, a list. Rough is fine:
+The fourteen are known. What is missing is which ones matter:
 
-> Models we sell and support, roughly how many of each are out there, and which two or three
-> generate the most support calls.
+> Which three or four generate the most support calls, and is each one mostly CLX or mostly
+> Omron in the field?
 
-This decides the order of everything below. There is no point me mapping a model you have three
-of when there are forty of something else.
+This decides everything below. There is no point mapping a model you have three of when there
+are forty of something else, and no point mapping the CLX version if the field is all Omron.
 
 ### Step 1 - One long log from a good day (per model)
 
@@ -98,6 +148,7 @@ point that never appears in a log is what a broken sensor looks like.
 **What makes a good day good:**
 
 - A busy shift, start to finish, including the morning startup (homing exercises everything).
+- **Say which control system it is** if you know, though the app now reads it off the log.
 - **Varied product.** Different panel sizes, different timber, both sides working. A day of one
   repeated job will miss half the machine.
 - Nothing much went wrong. If something did, say so - a "good day" I take on trust and that
@@ -113,7 +164,12 @@ second.
 
 ### Step 2 - The same model, a different machine
 
-Another full shift, different serial, ideally a different site.
+Another full shift, different serial, ideally a different site. **Same control system** - a CLX
+and an Omron machine of the same model are two separate mapping jobs, not two samples of one.
+
+If you can also send the *other* control system's version of the same model, send it, but as a
+separate pair rather than instead of the second machine. That is the matched pair in Part 2 that
+might name the nodes.
 
 This is what turns "inferred from one machine" into something I would put in front of a customer.
 On the V3 it caught my wrong address, found 8 points the first machine never used, and confirmed
