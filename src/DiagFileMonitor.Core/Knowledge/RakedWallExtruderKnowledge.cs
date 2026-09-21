@@ -74,6 +74,27 @@ public static class RakedWallExtruderKnowledge
         {
             new()
             {
+                Match = "Unsafe to move Floating Head",
+                Meaning =
+                    "NORMAL when the next panel is shorter than the last one. The floating head "
+                    + "has to come in to the new height, and the pieces the operator set by hand "
+                    + "for the taller panel are still standing in its way, so the laser sees them "
+                    + "and the machine stops rather than driving into them. The operator clears "
+                    + "the pieces and presses THNTD. Do not write this up as a fault on its own - "
+                    + "check the floating head height either side of it first.",
+                WhatToCheck = new[]
+                {
+                    "Did the floating head height target drop across it? A drop means this is the "
+                        + "machine doing its job and nothing needs fixing.",
+                    "Did it get through to step 330 afterwards? That is the operator having "
+                        + "cleared it.",
+                    "Only worth chasing if there was NO height reduction, or if it never cleared "
+                        + "and the operator says there was nothing there to move."
+                },
+                Confidence = Confidence.Confirmed
+            },
+            new()
+            {
                 Match = "Floating Side Safety Bar Pressed",
                 Meaning =
                     "The floating side safety bar is reading as pressed, so the machine will not "

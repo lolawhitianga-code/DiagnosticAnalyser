@@ -31,14 +31,17 @@ public record StuckStep(
 /// <summary>
 /// Reads the last step the sequencer reached and how long it stayed there.
 /// <para>
-/// This is the shape of a latched interlock, and it is what a bare fault count misses. A machine
-/// that checks a guard 39 times in a shift and clears each one in two tenths of a second is
-/// working; the same message once, with the machine still on that step four minutes later, is the
-/// callout. Counting the message gets that exactly backwards - the healthy machine looks worse.
+/// The measure is dwell, not frequency: how long it sat there, against how long it normally sits
+/// there, and whether it had ever taken that branch before today. A message repeated forty times
+/// says nothing on its own, because the PLC polls while it waits.
 /// </para>
 /// <para>
-/// So the measure is dwell, not frequency: how long it sat there, against how long it normally
-/// sits there, and whether it had ever taken that branch before today.
+/// <b>Dwell alone is not a fault either.</b> Plenty of steps are the machine waiting for the
+/// operator to do something, and the operator taking four minutes over it is not a machine
+/// problem. Where a specific check knows why the machine is waiting - the floating head
+/// obstruction being the one that matters, see <see cref="FloatingHeadCheck"/> - that check
+/// speaks and this one stays quiet, because "it stopped on step 321" is a worse answer than
+/// "the next panel is shorter and the operator has to move the hand-set pieces".
 /// </para>
 /// </summary>
 public static class StuckStepCheck

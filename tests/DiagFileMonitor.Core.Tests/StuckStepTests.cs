@@ -9,8 +9,13 @@ public class StuckStepTests
         StuckStepCheck.Check(MachineLogFile.Parse(lines));
 
     /// <summary>
-    /// The M21844 shape. The eject sequence ran 300, 302, 320, 330 all day; on the last one it
-    /// went 320 then 321 instead and stayed on 321 until the file was taken four minutes later.
+    /// A branch taken once, at the end, and never left.
+    /// <para>
+    /// Note what this check does NOT know: why. On the M21844 bundle this shape is the floating
+    /// head obstruction, which is ordinary behaviour going from a taller panel to a shorter one
+    /// - so FloatingHeadCheck takes that one and the annotator drops this. The check is still
+    /// right about the shape; it is just not the one that should speak.
+    /// </para>
     /// </summary>
     [Fact]
     public void CatchesABranchTakenOnceAtTheEnd()
@@ -35,9 +40,10 @@ public class StuckStepTests
     }
 
     /// <summary>
-    /// The trap this check exists to avoid. The same interlock fired 39 times on M21737 and
-    /// cleared in about two tenths of a second each time - that is a working machine, and
-    /// counting the message would have scored it worse than the one that was genuinely stuck.
+    /// The trap this check exists to avoid. The PLC polls while it waits, so one wait writes a
+    /// run of identical lines about 0.18s apart - 39 of them on an M21737 log, across six waits
+    /// that all cleared. Counting the lines scores the working machine worse than the stopped
+    /// one.
     /// </summary>
     [Fact]
     public void AnInterlockThatKeepsClearingIsNotAFault()
@@ -95,6 +101,34 @@ public class StuckStepTests
 
         Assert.NotNull(stuck);
         Assert.False(stuck!.WorthReporting);
+    }
+
+    /// <summary>
+    /// A wait the floating head check can explain must not also be written up here as a machine
+    /// that stopped dead. One finding, one voice, and the one that knows why wins.
+    /// </summary>
+    [Fact]
+    public void TheFloatingHeadObstructionIsNotAlsoReportedAsStuck()
+    {
+        var log = MachineLogFile.Parse(new[]
+        {
+            "09:00:00.0000000,  Other, FloatingSideHeight,  Move to : 3000",
+            "12:40:00.0000000,  Other, WallExtruderStep,  Step = 320",
+            "12:40:00.1000000,  Other, WallExtruderStep,  Step = 330",
+            "12:46:26.8000000,  Other, WallExtruderStep,  Step = 321",
+            "12:46:26.8400000,  Other, REv3,  Unsafe to move Floating Head please clear Obstacle Then Press THNTD",
+            "12:50:17.6000000,  Other, REv3,  Unsafe to move Floating Head please clear Obstacle Then Press THNTD"
+        });
+
+        Assert.NotNull(StuckStepCheck.Check(log));
+
+        var analysis = new SpidaLogAnalyser().Analyse(
+            log, Array.Empty<ErrLogEntry>(), Array.Empty<ChangeLogEntry>(), DateTime.UtcNow);
+
+        var findings = KnowledgeAnnotator.Annotate(analysis, log, "RakingWallExtruderV3DG", "M21844");
+
+        Assert.Null(findings.StuckStep);
+        Assert.True(findings.FloatingHead.Any);
     }
 
     [Fact]

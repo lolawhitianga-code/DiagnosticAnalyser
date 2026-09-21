@@ -42,6 +42,7 @@ public static class SpidaReportFormatter
         AppendHowItEnded(text, analysis, file);
         // Straight after the end of the log, because a machine still sitting on one step is the
         // callout itself rather than something to notice halfway down a report.
+        if (knowledge is not null) AppendFloatingHead(text, knowledge.FloatingHead);
         if (knowledge is not null) AppendStuckStep(text, knowledge.StuckStep);
         // What the operator last asked for, and what the machine did about it. This goes high up
         // because on a hand-driven machine it is usually the answer.
@@ -309,6 +310,66 @@ public static class SpidaReportFormatter
         foreach (var entry in analysis.FinalEntries)
         {
             text.AppendLine($"      {entry.Display}");
+        }
+    }
+
+    /// <summary>
+    /// The floating head obstruction, read with the panel height beside it. On its own the
+    /// message means very little - going from a taller panel to a shorter one it is the machine
+    /// doing exactly what it should, and writing it up as a fault sends a technician to a site
+    /// where nothing is broken.
+    /// </summary>
+    private static void AppendFloatingHead(StringBuilder text, FloatingHeadFindings findings)
+    {
+        if (!findings.Any) return;
+
+        text.AppendLine();
+        text.AppendLine("FLOATING HEAD WOULD NOT COME IN");
+        text.AppendLine($"  {ReportText.Wrap("Going from a taller panel to a shorter one, the head has to come in "
+            + "and the pieces set by hand for the taller panel are still in the way. The laser sees them and the "
+            + "machine stops rather than driving into them. The operator moves them and presses THNTD. That is "
+            + "normal - so what matters is whether the panel height actually dropped.", 2)}");
+        text.AppendLine();
+
+        if (findings.Routine.Count > 0)
+        {
+            text.AppendLine($"  {ReportText.Wrap($"{findings.Routine.Count} time(s): the next panel was shorter, or "
+                + "it cleared straight away and the machine carried on. Normal, nothing to chase.", 2)}");
+        }
+
+        foreach (var episode in findings.WorthALook)
+        {
+            text.AppendLine();
+            text.AppendLine($"  {episode.StartedAt:hh\\:mm\\:ss} - said it {episode.Complaints} time(s) over "
+                            + $"{MachineCycle.Describe(episode.Lasted)}.");
+
+            if (episode.HeightChange is { } change)
+            {
+                text.AppendLine($"      Floating head target went {episode.HeightBefore:F0} -> {episode.HeightAfter:F0} "
+                                + $"({change:+0;-0} mm).");
+            }
+            else if (episode.HeightBefore is { } before)
+            {
+                text.AppendLine($"      {ReportText.Wrap($"Floating head was last sent to {before:F0}. It was never "
+                    + "given a new target, so there is nothing to say how far it was being asked to come in.", 6)}");
+            }
+
+            if (episode.LogEndedDuringIt)
+            {
+                text.AppendLine($"      {ReportText.Wrap("The log ends here, so we cannot see it clear. That is not the "
+                    + "same as it never clearing - ask the operator whether they moved the pieces and pressed THNTD, "
+                    + "and whether it carried on.", 6)}");
+            }
+            else if (!episode.ClearedAndCarriedOn)
+            {
+                text.AppendLine("      It did not get past this into the rest of the eject sequence.");
+            }
+
+            if (!episode.ExplainedByALowerPanel && episode.HeightChange is not null)
+            {
+                text.AppendLine($"      {ReportText.Wrap("No height reduction behind this one, which is the case worth "
+                    + "asking about: if the operator says there was nothing in the way, look at the laser.", 6)}");
+            }
         }
     }
 

@@ -83,6 +83,9 @@ public class KnowledgeFindings
     /// <summary>The step the machine was sitting on when the log ran out, where that is unusual.</summary>
     public StuckStep? StuckStep { get; init; }
 
+    /// <summary>Times the machine would not bring the floating head in, and whether that was routine.</summary>
+    public FloatingHeadFindings FloatingHead { get; init; } = new(Array.Empty<ObstructionEpisode>());
+
     /// <summary>Output addresses named and sided from CloudLog/maint_data.json, where it is there.</summary>
     public SideFindings? Sides { get; init; }
 
@@ -131,7 +134,13 @@ public static class KnowledgeAnnotator
         var stepStory = StepOutcomeCheck.Check(machineLog);
         var cutNotTaken = CutNotTakenCheck.Check(machineLog);
         var waitingOn = WaitingOnCheck.Check(machineLog, machineModel ?? analysis.MachineModelFromLog);
+        var floatingHead = FloatingHeadCheck.Check(machineLog);
         var stuck = StuckStepCheck.Check(machineLog);
+
+        // The floating head check knows why the machine is waiting and this one does not, so
+        // where they are talking about the same wait, the one with the reason wins.
+        if (stuck is not null && floatingHead.Episodes.Any(e => e.LastComplaintAt >= stuck.ReachedAt))
+            stuck = null;
 
         // maint_data.json is the only thing in a bundle that names an output's side, so where the
         // machine wrote one, the addresses in this log can be named.
@@ -154,6 +163,7 @@ public static class KnowledgeAnnotator
                 CutNotTaken = cutNotTaken,
                 WaitingOn = waitingOn,
                 StuckStep = stuck,
+                FloatingHead = floatingHead,
                 Sides = sides
             };
         }
@@ -223,6 +233,7 @@ public static class KnowledgeAnnotator
             CutNotTaken = cutNotTaken,
             WaitingOn = waitingOn,
             StuckStep = stuck,
+            FloatingHead = floatingHead,
             Sides = sides
         };
     }

@@ -365,3 +365,33 @@ communications synchronisation error.
 The app only reads these where the log writes them in the drive's own `Er xx yy` form. Matching a
 bare `16.00` would turn timestamps and version numbers into alarms. **No Spida log has been seen
 carrying an Omron alarm yet**, so that scan may never fire — send one if you find it.
+
+## "Unsafe to move Floating Head please clear Obstacle in front of laser"
+
+**Usually not a fault.** Confirmed by Spida support, September 2026.
+
+Going from a taller panel to a shorter one, the floating head has to come **in** to the new
+height. The pieces the operator set by hand for the taller panel are still standing there, so the
+laser sees them and the machine stops rather than driving into them. The operator moves the
+pieces and presses THNTD. That is the guard doing its job.
+
+Two things make this easy to misread in a log:
+
+- **The PLC polls while it is blocked**, alternating `Step = 320` and `Step = 321` about every
+  0.18 s. One wait writes a run of identical lines. The gap between two of them is the poll
+  interval, not how long the machine was held up, and counting the lines makes a five second wait
+  look like thirty faults.
+- **The message says nothing about height.** The only way to tell a routine wait from a real one
+  is to read the `FloatingSideHeight` target either side of it.
+
+On an M21737 log, all six waits sat across a height reduction - from 52 mm to 1.9 m - and every
+one of them cleared through to step 330.
+
+So the question is never "did this message appear". It is:
+
+1. Did the floating head height target **drop** across it? A drop means nothing needs fixing.
+2. Did it get through to **step 330** afterwards?
+3. Only if there was **no height reduction**, or it never cleared and the operator says there was
+   nothing there to move, is the laser itself worth looking at.
+
+`FloatingHeadCheck` in the app does exactly this, and `StuckStepCheck` stays quiet when it fires.
