@@ -86,6 +86,9 @@ public class KnowledgeFindings
     /// <summary>Times the machine would not bring the floating head in, and whether that was routine.</summary>
     public FloatingHeadFindings FloatingHead { get; init; } = new(Array.Empty<ObstructionEpisode>(), TimeSpan.Zero);
 
+    /// <summary>What the machine's guards cost in time. Not faults - the price of not crashing.</summary>
+    public GuardLedger Guards { get; init; } = new(Array.Empty<GuardStop>(), TimeSpan.Zero);
+
     /// <summary>Output addresses named and sided from CloudLog/maint_data.json, where it is there.</summary>
     public SideFindings? Sides { get; init; }
 
@@ -135,6 +138,7 @@ public static class KnowledgeAnnotator
         var cutNotTaken = CutNotTakenCheck.Check(machineLog);
         var waitingOn = WaitingOnCheck.Check(machineLog, machineModel ?? analysis.MachineModelFromLog);
         var floatingHead = FloatingHeadCheck.Check(machineLog);
+        var guards = GuardStopLedger.Check(machineLog, floatingHead);
         var stuck = StuckStepCheck.Check(machineLog);
 
         // The floating head check knows why the machine is waiting and this one does not, so
@@ -164,6 +168,7 @@ public static class KnowledgeAnnotator
                 WaitingOn = waitingOn,
                 StuckStep = stuck,
                 FloatingHead = floatingHead,
+                Guards = guards,
                 Sides = sides
             };
         }
@@ -177,6 +182,10 @@ public static class KnowledgeAnnotator
 
         foreach (var known in knowledge.Faults)
         {
+            // Guards are not faults. GuardStopLedger reports what they cost instead, and leaving
+            // them here as well would put them back in the list this is trying to keep clean.
+            if (known.IsGuard) continue;
+
             var hits = faultsSeen
                 .Where(f => f.Text.Contains(known.Match, StringComparison.OrdinalIgnoreCase))
                 .ToList();
@@ -234,6 +243,7 @@ public static class KnowledgeAnnotator
             WaitingOn = waitingOn,
             StuckStep = stuck,
             FloatingHead = floatingHead,
+            Guards = guards,
             Sides = sides
         };
     }

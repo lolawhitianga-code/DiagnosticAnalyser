@@ -93,7 +93,26 @@ public static class RakedWallExtruderKnowledge
                     "Only worth a second look if there was NO height reduction and it held the "
                         + "machine up for over a minute."
                 },
-                Confidence = Confidence.Confirmed
+                Confidence = Confidence.Confirmed,
+                IsGuard = true
+            },
+            new()
+            {
+                Match = "Clear Of Any Moving Parts",
+                Meaning =
+                    "A GUARD, not a fault. The machine asking whether everyone is clear before it "
+                    + "moves, and waiting for the clamp/fire buttons. It is the single most "
+                    + "frequent message on a busy shift - 42 of them in one M21844 day - and the "
+                    + "operator answers each one in about three seconds. Listing it as a fault "
+                    + "buries everything that actually went wrong.",
+                WhatToCheck = new[]
+                {
+                    "How long is the operator taking to answer it? Three seconds is normal.",
+                    "Only worth a look if a prompt went unanswered for minutes, which means the "
+                        + "operator walked away or could not reach the buttons."
+                },
+                Confidence = Confidence.Confirmed,
+                IsGuard = true
             },
             new()
             {
@@ -108,7 +127,8 @@ public static class RakedWallExtruderKnowledge
                     "Does the fault clear on an E-Stop reset, and does it come straight back?",
                     "If it comes straight back with the bar clear, suspect the bar switch or its wiring."
                 },
-                Confidence = Confidence.Confirmed
+                Confidence = Confidence.Confirmed,
+                IsGuard = true
             },
             new()
             {

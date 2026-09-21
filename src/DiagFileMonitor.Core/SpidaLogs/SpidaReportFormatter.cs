@@ -42,7 +42,7 @@ public static class SpidaReportFormatter
         AppendHowItEnded(text, analysis, file);
         // Straight after the end of the log, because a machine still sitting on one step is the
         // callout itself rather than something to notice halfway down a report.
-        if (knowledge is not null) AppendFloatingHead(text, knowledge.FloatingHead);
+        if (knowledge is not null) AppendGuardStops(text, knowledge.Guards, knowledge.FloatingHead);
         if (knowledge is not null) AppendStuckStep(text, knowledge.StuckStep);
         // What the operator last asked for, and what the machine did about it. This goes high up
         // because on a hand-driven machine it is usually the answer.
@@ -313,51 +313,70 @@ public static class SpidaReportFormatter
         }
     }
 
+    /// <summary>"1 time" rather than "1 time(s)". Small thing; the report is read by people.</summary>
+    private static string Times(int count) => count == 1 ? "1 time" : $"{count} times";
+
     /// <summary>
-    /// What the floating head obstruction guard cost in time.
+    /// What the machine's guards cost in time.
     /// <para>
-    /// This is not written up as a fault, because it is not one. The laser stops the head before
-    /// it drives into whatever is in front of it - almost always the pieces set by hand for a
-    /// taller panel, still standing there when the next panel is shorter. Time spent clearing
-    /// that is time well spent against the machine crashing into it. So the report gives the
-    /// cost and leaves it at that.
+    /// None of these are faults and none are written up as such. Each is the machine refusing to
+    /// move until a person has dealt with something, and the time goes on the alternative being
+    /// a crash or somebody hurt. What a customer fairly asks is how much of the day goes on
+    /// them, so they are counted and timed instead of listed.
     /// </para>
     /// </summary>
-    private static void AppendFloatingHead(StringBuilder text, FloatingHeadFindings findings)
+    private static void AppendGuardStops(StringBuilder text, GuardLedger ledger, FloatingHeadFindings floatingHead)
     {
-        if (!findings.Any) return;
+        if (!ledger.Any) return;
 
         text.AppendLine();
-        text.AppendLine("FLOATING HEAD OBSTRUCTION - WHAT IT COST IN TIME");
-        text.AppendLine($"  {ReportText.Wrap("The laser stopping the head before it drives into something. Going from a "
-            + "taller panel to a shorter one, the pieces set by hand for the taller one are still in the way, and the "
-            + "operator moves them and presses THNTD. This is the guard working - far better than the machine "
-            + "crashing into what it saw. So this is a cost to know about, not a fault to fix.", 2)}");
+        text.AppendLine("GUARD STOPS - WHAT THEY COST IN TIME");
+        text.AppendLine($"  {ReportText.Wrap("These are not faults. Each one is the machine refusing to move until "
+            + "somebody deals with something, and we would far rather spend the time than have it crash into what it "
+            + "saw or move with a person against the bar. They are worth having - this is just what they cost.", 2)}");
         text.AppendLine();
 
-        var share = findings.ShareOfShift is { } fraction ? $" - {fraction:P2} of the log" : string.Empty;
-        var waits = findings.Episodes.Count == 1 ? "1 wait" : $"{findings.Episodes.Count} waits";
-        text.AppendLine($"  {waits}, {MachineCycle.Describe(findings.TotalTime)} in total{share}.");
+        var share = ledger.ShareOfShift is { } fraction ? $", {fraction:P2} of the log" : string.Empty;
+        text.AppendLine($"  {Times(ledger.Count)}, {MachineCycle.Describe(ledger.Total)} in total{share}.");
+        text.AppendLine($"  {ReportText.Wrap("These are counted here and left out of the fault list below, so that list "
+            + "holds what actually went wrong.", 2)}");
+        text.AppendLine();
 
-        if (findings.LongestEpisode is { } worst && findings.Episodes.Count > 1)
+        foreach (var guard in ledger.Used.OrderByDescending(g => g.Total))
         {
-            var why = worst.HeightChange is { } change && change < 0
-                ? $" (head coming in {Math.Abs(change):F0} mm)"
+            var spread = guard.Count > 1
+                ? $" Usually {MachineCycle.Describe(guard.Typical)}, worst {MachineCycle.Describe(guard.Longest)}."
                 : string.Empty;
-            text.AppendLine($"  Longest was {MachineCycle.Describe(worst.Lasted)} at {worst.StartedAt:hh\\:mm\\:ss}{why}.");
+
+            text.AppendLine($"  {guard.Name}");
+            text.AppendLine($"      {Times(guard.Count)}, {MachineCycle.Describe(guard.Total)} in total.{spread}");
+            text.AppendLine($"      {ReportText.Wrap(guard.WhatItIs, 6)}");
+            text.AppendLine($"      Clears: {guard.HowItClears}");
+            text.AppendLine();
         }
 
+        AppendFloatingHeadExceptions(text, floatingHead);
+    }
+
+    /// <summary>
+    /// The handful of floating head waits a lower next panel does not explain. Everything else
+    /// about that guard is already in the ledger above.
+    /// </summary>
+    private static void AppendFloatingHeadExceptions(StringBuilder text, FloatingHeadFindings findings)
+    {
         if (findings.AbandonedCount > 0)
         {
-            text.AppendLine($"  {ReportText.Wrap($"{findings.AbandonedCount} of them went back to step 0 rather than "
-                + "being cleared - the operator gave up on it and started again.", 2)}");
+            var them = findings.AbandonedCount == 1 ? "that one" : "those";
+            text.AppendLine($"  {ReportText.Wrap($"{Times(findings.AbandonedCount)} a floating head wait went back to "
+                + $"step 0 rather than being cleared - the operator gave up and started again, so {them} cost a cycle "
+                + "as well as the time.", 2)}");
+            text.AppendLine();
         }
 
         foreach (var episode in findings.WorthALook)
         {
-            text.AppendLine();
-            text.AppendLine($"  {episode.StartedAt:hh\\:mm\\:ss} - worth a second look. Held it up for "
-                            + $"{MachineCycle.Describe(episode.Lasted)}.");
+            text.AppendLine($"  {ReportText.Wrap($"{episode.StartedAt:hh\\:mm\\:ss} - a floating head wait worth a "
+                + $"second look. It held the machine up for {MachineCycle.Describe(episode.Lasted)}.", 2)}");
 
             if (episode.HeightChange is { } change)
             {
@@ -376,6 +395,8 @@ public static class SpidaReportFormatter
                     + "same as it never clearing - ask whether the operator moved the pieces, pressed THNTD, and "
                     + "whether it carried on.", 6)}");
             }
+
+            text.AppendLine();
         }
     }
 

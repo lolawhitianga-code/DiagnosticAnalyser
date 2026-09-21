@@ -52,6 +52,15 @@ public class KnownFault
     public IReadOnlyList<string> WhatToCheck { get; init; } = Array.Empty<string>();
 
     public Confidence Confidence { get; init; } = Confidence.Unconfirmed;
+
+    /// <summary>
+    /// A guard rather than a fault: the machine refusing to move until a person deals with
+    /// something. These are reported by <see cref="GuardStopLedger"/> as time spent, and kept
+    /// out of the fault list so it holds what actually went wrong. The notes are still here
+    /// because the guard can itself go wrong - a bar switch that reads pressed with nobody near
+    /// it is a real fault, and then this is what to check.
+    /// </summary>
+    public bool IsGuard { get; init; }
 }
 
 /// <summary>A problem already reported on this machine family, so it is not chased again from scratch.</summary>

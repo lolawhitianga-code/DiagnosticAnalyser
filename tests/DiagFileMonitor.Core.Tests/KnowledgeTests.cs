@@ -51,17 +51,37 @@ public class KnowledgeAnnotatorTests
         return KnowledgeAnnotator.Annotate(analysis, log, "RakingWallExtruderV3DG", serial);
     }
 
+    /// <summary>
+    /// The safety bar is a guard, not a fault, so it belongs in the time ledger and not in the
+    /// fault list. We still keep notes on it, because a bar switch that reads pressed with
+    /// nobody near it is a real fault - but that is a different finding from somebody leaning
+    /// on the bar for five seconds.
+    /// </summary>
     [Fact]
-    public void RecognisesTheSafetyBarFault()
+    public void TheSafetyBarIsTimedAsAGuardNotListedAsAFault()
     {
         var findings = Annotate(Log(
             "10:12:13.0000000,  Other, WallExtruderStep,  Step = 0",
             "10:12:13.8782691,  Other, WallExtruderPLC,  Floating Side Safety Bar Pressed - Press Estop Reset to Continue",
             "10:12:20.0000000,  Other, WallExtruderStep,  Step = 10"));
 
-        var match = Assert.Single(findings.MatchedFaults);
-        Assert.Contains("safety bar", match.Known.Meaning, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(Confidence.Confirmed, match.Known.Confidence);
+        Assert.DoesNotContain(findings.MatchedFaults,
+            m => m.Known.Meaning.Contains("safety bar", StringComparison.OrdinalIgnoreCase));
+
+        var bar = findings.Guards.Guards.Single(g => g.Name.Contains("safety bar", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(1, bar.Count);
+    }
+
+    /// <summary>The notes are still there for when the guard itself is the thing going wrong.</summary>
+    [Fact]
+    public void KeepsTheNotesOnWhatToCheckWhenAGuardMisbehaves()
+    {
+        var bar = MachineKnowledgeBase.Find("RakingWallExtruderV3DG")!.Faults
+            .Single(f => f.Match.Contains("Safety Bar", StringComparison.OrdinalIgnoreCase));
+
+        Assert.True(bar.IsGuard);
+        Assert.Equal(Confidence.Confirmed, bar.Confidence);
+        Assert.Contains(bar.WhatToCheck, c => c.Contains("bar switch", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

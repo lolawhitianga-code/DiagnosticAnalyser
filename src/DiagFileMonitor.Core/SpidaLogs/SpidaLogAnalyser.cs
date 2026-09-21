@@ -224,6 +224,24 @@ public class SpidaLogAnalyser
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>
+    /// Guards, not faults. The machine refusing to move until a person deals with something.
+    /// <para>
+    /// These have to come out of the fault list or they swamp it - the "clear of any moving
+    /// parts" prompt alone appeared 42 times in an M21844 shift, more than every genuine fault
+    /// in that log put together, and every one of them was the machine asking a question and
+    /// getting an answer inside three seconds. A technician reading a fault list wants the four
+    /// things that went wrong, not the forty times the machine checked it was safe to move.
+    /// </para>
+    /// <para>
+    /// They are not thrown away. <see cref="Knowledge.GuardStopLedger"/> counts and times them,
+    /// and the report gives what they cost - which on both V3 logs is around 1% of the shift.
+    /// </para>
+    /// </summary>
+    private static readonly Regex GuardStop = new(
+        @"(clear of any moving parts|safety bar pressed|unsafe to move floating head)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
     /// Drive and axis states that are real faults. These arrive as MotionEvent rather than Other,
     /// which the fault scan used to skip entirely.
     /// <para>
@@ -412,6 +430,8 @@ public class SpidaLogAnalyser
             if (motion ? !MotionFault.IsMatch(text) : !FaultWording.IsMatch(text)) continue;
             if (NoisePatterns.Any(p => p.IsMatch(text))) continue;
             if (Advisory.IsMatch(text)) continue;
+            // Counted in the guard ledger instead, where the time they cost means something.
+            if (GuardStop.IsMatch(text)) continue;
 
             faults.Add(new MachineLogFault
             {
