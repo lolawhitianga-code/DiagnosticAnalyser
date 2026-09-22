@@ -194,3 +194,59 @@ public class MachineConfigIoTests
     public void AMissingFileIsNotAnError() =>
         Assert.False(MachineConfigIo.Read(Path.Combine(Path.GetTempPath(), "nope.xml")).Any);
 }
+
+public class ConfigPlatformTests
+{
+    private static string Machine(string body) =>
+        $"<?xml version=\"1.0\" encoding=\"utf-16\"?><WallExtruder>{body}</WallExtruder>";
+
+    private static string Point(string section, string name, string port, string node, string addr) =>
+        $"<{section}><Inputs><{name}><InUse>true</InUse><Port>{port}</Port>"
+        + $"<NodeNum>{node}</NodeNum><Address>{addr}</Address></{name}></Inputs></{section}>";
+
+    /// <summary>Every real machine here sits on one platform, and that is the expected shape.</summary>
+    [Fact]
+    public void OnePlatformIsNormal()
+    {
+        var config = MachineConfigIo.Parse(Machine(
+            Point("CommonIO", "RackLockOff", "192.168.250.1", "2", "9")
+            + Point("FixedSide", "PlateSupportDown", "192.168.250.1", "1", "1")));
+
+        Assert.Single(config.PlatformsUsed);
+        Assert.False(config.PlatformLooksWrong);
+    }
+
+    /// <summary>
+    /// The one mix Spida allow: a CLX printer on an Omron machine. Expected, so it must not read
+    /// as a problem.
+    /// </summary>
+    [Fact]
+    public void AClxPrinterOnAnOmronMachineIsExpected()
+    {
+        var config = MachineConfigIo.Parse(Machine(
+            Point("CommonIO", "RackLockOff", "192.168.250.1", "2", "9")
+            + Point("FixedSide", "PlateSupportDown", "192.168.250.1", "1", "1")
+            + Point("TimPrinter", "PrinterReady", "TCP192.168.50.9", "0", "1")));
+
+        Assert.Equal(2, config.PlatformsUsed.Count);
+        Assert.Empty(config.OffPlatformNonPrinters);
+        Assert.False(config.PlatformLooksWrong);
+    }
+
+    /// <summary>
+    /// Anything else on a second platform means the reading is wrong. Ignoring the option flags
+    /// made an M21844 look like this - an Omron machine apparently running CLX subsystems it does
+    /// not have.
+    /// </summary>
+    [Fact]
+    public void AnythingElseOnASecondPlatformIsFlagged()
+    {
+        var config = MachineConfigIo.Parse(Machine(
+            Point("CommonIO", "RackLockOff", "192.168.250.1", "2", "9")
+            + Point("FixedSide", "PlateSupportDown", "192.168.250.1", "1", "1")
+            + Point("MajorSubInfeed", "Bay1Prox", "TCP192.168.50.2:2", "1", "1")));
+
+        Assert.True(config.PlatformLooksWrong);
+        Assert.Single(config.OffPlatformNonPrinters);
+    }
+}

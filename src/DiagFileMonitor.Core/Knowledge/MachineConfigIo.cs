@@ -48,6 +48,47 @@ public record MachineConfig(
     /// <summary>Points defined in the file for kit this machine does not have.</summary>
     public int DefinedButNotOnThisMachine => Signals.Count(s => s.Fitted && !s.SubsystemFitted);
 
+    /// <summary>The control platforms the fitted points sit on, with how many on each.</summary>
+    public IReadOnlyDictionary<ControlPlatform, int> PlatformsUsed => Fitted
+        .GroupBy(s => ControlPlatformCheck.OfAddress(s.Address))
+        .Where(g => g.Key != ControlPlatform.Unknown)
+        .ToDictionary(g => g.Key, g => g.Count());
+
+    /// <summary>
+    /// A machine is built on one control system. The one exception Spida allow is a CLX printer
+    /// on an Omron machine, so a handful of printer points on the other platform is expected and
+    /// anything else is not.
+    /// <para>
+    /// This is worth checking rather than assuming, because a mixed reading almost always means
+    /// the reading is wrong. Taking each point's InUse flag without its option's Fitted flag made
+    /// an M21844 look like an Omron machine running two CLX subsystems; it runs neither, and the
+    /// definitions belong to options it has not got.
+    /// </para>
+    /// </summary>
+    public bool PlatformLooksWrong => PlatformsUsed.Count > 1 && OffPlatformNonPrinters.Count > 0;
+
+    /// <summary>Fitted points on the minority platform that are not a printer.</summary>
+    public IReadOnlyList<ConfiguredSignal> OffPlatformNonPrinters
+    {
+        get
+        {
+            if (PlatformsUsed.Count <= 1) return Array.Empty<ConfiguredSignal>();
+
+            var main = PlatformsUsed.OrderByDescending(p => p.Value).First().Key;
+
+            return Fitted
+                .Where(s => ControlPlatformCheck.OfAddress(s.Address) != main)
+                .Where(s => ControlPlatformCheck.OfAddress(s.Address) != ControlPlatform.Unknown)
+                .Where(s => !IsPrinter(s))
+                .ToList();
+        }
+    }
+
+    private static bool IsPrinter(ConfiguredSignal signal) =>
+        signal.Path.Contains("print", StringComparison.OrdinalIgnoreCase)
+        || signal.Name.Contains("print", StringComparison.OrdinalIgnoreCase)
+        || signal.Path.Contains("TimPrint", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
     /// The port carrying most of the machine's I/O. The log's NodeN Status lines come from this
     /// controller, so it is the one a node number should be read against.
