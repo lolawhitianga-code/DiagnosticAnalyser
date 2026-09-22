@@ -24,8 +24,17 @@ public class ComplaintFindings
     public string Issue { get; init; } = string.Empty;
     public IReadOnlyList<MatchedTopic> Topics { get; init; } = Array.Empty<MatchedTopic>();
 
+    /// <summary>One side out by a fixed amount - points at that side's trolley home sensor.</summary>
+    public HomeSensorFinding? HomeSensor { get; init; }
+
     public bool HasIssueText => Issue.Trim().Length > 0;
-    public bool Any => Topics.Count > 0;
+    public bool Any => Topics.Count > 0 || HomeSensor is not null;
+
+    /// <summary>Reference photos the technician should see alongside the report.</summary>
+    public IReadOnlyList<ReferenceGuide> Guides =>
+        HomeSensor is null
+            ? Array.Empty<ReferenceGuide>()
+            : new[] { ReferenceGuides.HomeSensorGap };
 }
 
 /// <summary>
@@ -45,7 +54,9 @@ public static class ComplaintRouter
         string? issue,
         IReadOnlyList<ChangeLogEntry> changeLog,
         IReadOnlyList<MachineLogEntry> machineLog,
-        string? machineModel = null)
+        string? machineModel = null,
+        DateTime? bundleTime = null,
+        MachineConfig? config = null)
     {
         var text = (issue ?? string.Empty).Trim();
         if (text.Length == 0) return new ComplaintFindings();
@@ -72,6 +83,7 @@ public static class ComplaintRouter
         return new ComplaintFindings
         {
             Issue = text,
+            HomeSensor = HomeSensorComplaintCheck.Check(text, changeLog, bundleTime, machineModel, config),
             // The topic matching the most of the operator's words is the likeliest reading.
             Topics = matches.OrderByDescending(m => m.MatchedOn.Count).ToList()
         };

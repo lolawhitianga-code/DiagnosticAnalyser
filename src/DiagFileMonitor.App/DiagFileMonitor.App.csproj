@@ -36,6 +36,13 @@
       still wins over this - see HelpLibrary.
     -->
     <Resource Include="..\..\docs\HELP.md" Link="Assets\HELP.md" />
+
+    <!--
+      Reference photos from solved cases, shown beside a report whose finding matches. Linked from
+      docs/cases so the write-up and the app share one copy of each picture.
+    -->
+    <Resource Include="..\..\docs\cases\M21856\1-before-sensor-too-far.jpg" Link="Assets\References\home-sensor-too-far.jpg" />
+    <Resource Include="..\..\docs\cases\M21856\2-after-sensor-1-2mm.jpg" Link="Assets\References\home-sensor-correct.jpg" />
   </ItemGroup>
 
 </Project>

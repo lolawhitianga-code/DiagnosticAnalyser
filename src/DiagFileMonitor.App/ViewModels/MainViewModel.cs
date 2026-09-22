@@ -163,13 +163,13 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            var report = await _analysisService.AnalyseAsync(ids);
+            var outcome = await _analysisService.AnalyseWithGuidesAsync(ids);
 
             var heading = ids.Count == 1
                 ? $"Analysis of {SelectedFiles.FirstOrDefault()?.OriginalFileName ?? SelectedFile?.OriginalFileName}"
                 : $"Analysis of {ids.Count} diagnostic files";
 
-            AnalysisReady?.Invoke(this, new AnalysisResult(heading, report));
+            AnalysisReady?.Invoke(this, new AnalysisResult(heading, outcome.Report, outcome.Guides));
             StatusMessage = ids.Count == 1 ? "Analysis complete." : $"Analysed {ids.Count} files.";
         }
         catch (Exception ex)
@@ -260,7 +260,10 @@ public partial class MainViewModel : ObservableObject
     public event EventHandler<ReportRequestArgs>? ProductionReportRequested;
     public event EventHandler<IoStateRequestArgs>? IoStateRequested;
 
-    public record AnalysisResult(string Heading, string ReportText);
+    public record AnalysisResult(
+        string Heading,
+        string ReportText,
+        IReadOnlyList<DiagFileMonitor.Core.Knowledge.ReferenceGuide>? Guides = null);
 
     public record FeedbackRequest(DiagnosticFileSummary File, string ReportText, string OutputFolder);
 

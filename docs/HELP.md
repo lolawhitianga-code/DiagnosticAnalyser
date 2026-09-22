@@ -302,7 +302,24 @@ flat. Those labels matter - the report gets quoted to customers.
 <!--help:analysis.copy-->
 ### Copy to clipboard
 
-Copies the whole report, ready to paste into a ticket or an email.
+Copies the whole report, ready to paste into a ticket or an email. The reference photos are not
+copied - they are for the person at the screen.
+
+<!--help:analysis.photo-->
+### Reference photos
+
+When the report points at something a photo explains better than words, photos from a solved job
+appear down the right-hand side - usually a wrong one and a right one, side by side. Click a photo
+to see it full size.
+
+They come from real cases, and each set says which machine and job it came from. The first set is
+from M21856 at Mainland: a trolley home sensor sitting too far from its aluminium block, and the
+same sensor after it was moved to 1-2 mm.
+
+<!--help:analysis.photoclose-->
+### Close the photo
+
+Goes back to the report.
 
 ---
 

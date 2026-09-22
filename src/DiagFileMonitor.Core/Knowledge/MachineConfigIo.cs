@@ -30,7 +30,8 @@ public record ConfiguredSignal(
 }
 
 /// <summary>An axis, and which node it answers on.</summary>
-public record ConfiguredAxis(string Name, int Node, string Port, double Velocity, double Accel, double Scale);
+public record ConfiguredAxis(
+    string Name, int Node, string Port, double Velocity, double Accel, double Scale, string HomeMode = "");
 
 public record MachineConfig(
     IReadOnlyList<ConfiguredSignal> Signals,
@@ -262,7 +263,8 @@ public static class MachineConfigIo
                 fields.GetValueOrDefault("Port", string.Empty).Trim(),
                 Number(fields, "Velocity") ?? 0,
                 Number(fields, "Accel") ?? 0,
-                Number(fields, "Scale") ?? 0));
+                Number(fields, "Scale") ?? 0,
+                fields.GetValueOrDefault("HomeMode", string.Empty).Trim()));
             return;
         }
 

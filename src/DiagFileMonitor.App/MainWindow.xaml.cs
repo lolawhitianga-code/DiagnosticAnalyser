@@ -42,7 +42,10 @@ public partial class MainWindow : Window
         new AnalysisWindow
         {
             Owner = this,
-            DataContext = new ViewModels.AnalysisViewModel(result.Heading, result.ReportText)
+            DataContext = new ViewModels.AnalysisViewModel(
+                result.Heading,
+                result.ReportText,
+                result.Guides ?? System.Array.Empty<DiagFileMonitor.Core.Knowledge.ReferenceGuide>())
         }.Show();
     }
 

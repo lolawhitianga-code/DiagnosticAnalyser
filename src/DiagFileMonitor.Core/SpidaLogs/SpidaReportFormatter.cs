@@ -120,6 +120,8 @@ public static class SpidaReportFormatter
             return;
         }
 
+        if (complaint.HomeSensor is { } home) AppendHomeSensor(text, home);
+
         foreach (var match in complaint.Topics)
         {
             text.AppendLine();
@@ -133,6 +135,74 @@ public static class SpidaReportFormatter
 
             AppendRelatedChanges(text, match);
         }
+    }
+
+    /// <summary>
+    /// A servo out by a fixed amount. Written as the steps support took on M21856, in that order,
+    /// because the order is the point: a changed setting is quicker to rule out than a sensor.
+    /// The same steps fit almost every servo on every machine, CLX and Omron.
+    /// </summary>
+    private static void AppendHomeSensor(StringBuilder text, HomeSensorFinding home)
+    {
+        var amount = home.OffsetMm is { } mm ? $"{mm:0.#} mm" : "a fixed amount";
+        var axis = home.Axis is null ? "the servo" : $"the {home.Axis}";
+
+        text.AppendLine();
+        text.AppendLine($"  {(home.Axis ?? "A SERVO").ToUpperInvariant()} OUT BY {amount.ToUpperInvariant()}"
+            + (home.HomesToSensor == false ? " - CHECK HOW IT FINDS ZERO" : " - CHECK ITS HOME SENSOR"));
+        text.AppendLine($"    (from \"{home.MatchedText}\" in what the operator wrote)");
+
+        if (!home.AxisKnown)
+        {
+            text.AppendLine();
+            text.AppendLine($"    {ReportText.Wrap("Could not tell which servo from what the operator wrote - ask them."
+                + (home.OtherCandidates.Count > 0 ? $" It could be: {string.Join(", ", home.OtherCandidates)}." : ""), 4)}");
+            if (home.SensorHomedAxes.Count > 0)
+                text.AppendLine($"    {ReportText.Wrap($"Servos on this machine that home to a sensor: {string.Join(", ", home.SensorHomedAxes)}.", 4)}");
+        }
+        else if (home.OtherCandidates.Count > 0)
+        {
+            text.AppendLine($"    {ReportText.Wrap($"Taken as {axis}; the words also fit {string.Join(", ", home.OtherCandidates)}.", 4)}");
+        }
+
+        text.AppendLine();
+
+        if (home.SettingsChanged)
+        {
+            text.AppendLine($"    1. {ReportText.Wrap($"Rule out the settings first - these changed in the last "
+                + $"{home.DaysLookedBack} days and any of them could move {axis} on purpose:", 7)}");
+            foreach (var change in home.RelevantChanges.Take(6))
+                text.AppendLine($"         {change.Display}");
+        }
+        else
+        {
+            text.AppendLine($"    1. {ReportText.Wrap($"Change.log shows nothing in the last {home.DaysLookedBack} days that "
+                + $"would move {axis} on purpose - no home position, scale, offset or limit change. A position "
+                + "error with no setting change points at the hardware that sets the position.", 7)}");
+        }
+
+        if (home.HomesToSensor == false)
+        {
+            text.AppendLine($"    2. {ReportText.Wrap($"The config says {axis} does not home to a sensor "
+                + $"(HomeMode = {home.HomeMode}) - its position is set, not found - so the home sensor check "
+                + "does not apply. Look at its scale, and for a loose coupling, pulley or belt that has slipped.", 7)}");
+            return;
+        }
+
+        var homing = home.HomesToSensor == true
+            ? $"The config confirms {axis} homes to a sensor (HomeMode = Sensor)"
+            : $"Almost every servo on CLX and Omron machines homes to a sensor, so {axis} very likely does";
+        text.AppendLine($"    2. {ReportText.Wrap($"{homing}. That sensor sets where the machine thinks zero is, "
+            + "so if it is wrong every position after it is out by the same amount.", 7)}");
+
+        text.AppendLine($"    3. {ReportText.Wrap($"With {axis} clear of timber and safe to move, send it home "
+            + "and look at the sensor. It should sit 1-2 mm from its aluminium block (or target). The servo "
+            + "drives onto the block, backs slowly off, and the instant the sensor turns off is home - too far "
+            + "away and that point is not crisp.", 7)}");
+        text.AppendLine($"    4. Reposition it if it is too far, re-home, and check {axis} again.");
+        text.AppendLine();
+        text.AppendLine($"    {ReportText.Wrap("Reference photos of a wrong and a right sensor are shown beside this "
+            + "report (a V3 trolley - it looks the same on almost every servo).", 4)}");
     }
 
     private static void AppendRelatedChanges(StringBuilder text, MatchedTopic match)

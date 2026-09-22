@@ -51,3 +51,15 @@ different times as a matter of course.
 
 That chain is the diagnostic - a consistent offset on one side, a clean change log, and a
 sensor-homed axis. The log is not part of it.
+
+## Any servo, any machine
+
+Per Spida, this looks almost the same on nearly every servo on every machine, CLX and Omron.
+The configs agree: every V3 and Wall Sheather servo has `HomeMode = Sensor`, as do the Tornado's
+follower, saw Y/Z/R and printer. The Tornado's in and out belts are the exception
+(`HomeMode = DefinePosition`) - there is no home sensor to check on those.
+
+The app now runs this chain from the operator's words: when the issue says something is "out by
+N mm", it works out which servo from the machine's own config, checks how it homes, looks for a
+home position, scale, offset or limit change on it in the last 60 days, and shows the two photos
+above beside the report.
