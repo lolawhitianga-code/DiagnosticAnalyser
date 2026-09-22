@@ -33,35 +33,21 @@ block**. Too far and the switching point drifts, so home lands in the wrong plac
 With the gripper clear of timber and safe to move, send the fixed gripper home and look at the
 sensor. Reposition it 1-2 mm from the aluminium block. Re-home.
 
-## Was it in the log? Yes
+## Was it in the log? No
 
-The two side pullers normally finish homing **in the same millisecond**. On M21856 they did not:
+Nothing in MachineLog.txt points at this. An earlier version of this write-up claimed the fixed
+side finishing homing 2.17 s after the floating side was the signature. **It is not.** The two
+trolleys are independent, each with its own home sensor and its own home position -
+`RakingWallExtruderV3DG.xml` has them at 5840 and 5830 on this machine - so they reach home at
+different times as a matter of course.
 
-```
-07:45:18  fixed 39.82 s, floating 37.65 s - the fixed side was 2.17 s late.
-```
+## How it was actually found
 
-Against every other full homing run on file:
+1. The operator reported one side out by a fixed amount - 30 mm.
+2. `Change.log` showed nothing changed. A position error with no setting change points at the
+   hardware that sets the position.
+3. `HomeMode = Sensor` in the config: the home sensor defines zero for that trolley.
+4. Sent the gripper home and looked at the sensor. It was too far from the block.
 
-| Machine | Full homing runs | Fixed minus floating |
-|---|---|---|
-| M21737 | 1 | 0.00 s |
-| M21844 | 1 | 0.00 s |
-| M20771 (Feb 2025 - Aug 2026) | 4 | 0.00 s every time |
-| **M21856** | 1 | **+2.17 s** |
-| **M20771 (21 Sept 2026)** | 1 | **-1.40 s** (floating late) |
-
-Short re-homes from nearly home wobble by up to 0.8 s and are ignored; only a full home travels far
-enough to show it.
-
-The app now checks this (`HomingBalanceCheck`) and reports it as **THE TWO PULLERS DID NOT HOME
-TOGETHER**, naming the late side and the sensor to look at.
-
-## Still open
-
-- **A log from M21856 after the fix** would show the gap back to 0.00 s and confirm the check works
-  both ways.
-- **M20771 at Trusstech shows the same signature on the floating side** in its latest export -
-  1.40 s late. Unconfirmed, but worth a look at that sensor on the next visit.
-- The 2.17 s is not converted to millimetres. That needs the home velocity's units and the back-off
-  distance; a wrong conversion would be worse than "this side was late".
+That chain is the diagnostic - a consistent offset on one side, a clean change log, and a
+sensor-homed axis. The log is not part of it.

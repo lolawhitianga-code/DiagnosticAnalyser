@@ -95,9 +95,6 @@ public class KnowledgeFindings
     /// </summary>
     public PlatformFinding Platform { get; init; } = new(ControlPlatform.Unknown, AddressTransport.Unknown, "not read", 0);
 
-    /// <summary>Whether the two side pullers homed together. A late side points at its home sensor.</summary>
-    public HomingFindings Homing { get; init; } = new(Array.Empty<HomingRun>());
-
     /// <summary>This machine's I/O held against the map for its model.</summary>
     public IoMapFindings IoMap { get; init; } =
         new(Array.Empty<PointHere>(), Array.Empty<PointHere>(), Array.Empty<SignalId>(),
@@ -155,7 +152,6 @@ public static class KnowledgeAnnotator
         var ioMap = IoMapComparison.Check(timeline, machineModel ?? analysis.MachineModelFromLog);
         var waitingOn = WaitingOnCheck.Check(machineLog, machineModel ?? analysis.MachineModelFromLog);
         var floatingHead = FloatingHeadCheck.Check(machineLog);
-        var homing = HomingBalanceCheck.Check(machineLog);
         var guards = GuardStopLedger.Check(machineLog, floatingHead);
         var stuck = StuckStepCheck.Check(machineLog);
 
@@ -186,7 +182,6 @@ public static class KnowledgeAnnotator
                 FloatingHead = floatingHead,
                 Guards = guards,
                 Platform = platform,
-                Homing = homing,
                 IoMap = ioMap,
                 Sides = sides
             };
@@ -264,7 +259,6 @@ public static class KnowledgeAnnotator
             FloatingHead = floatingHead,
             Guards = guards,
             Platform = platform,
-            Homing = homing,
             IoMap = ioMap,
             Sides = sides
         };

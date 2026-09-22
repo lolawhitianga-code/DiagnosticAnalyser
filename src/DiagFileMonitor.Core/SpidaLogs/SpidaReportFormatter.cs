@@ -72,7 +72,6 @@ public static class SpidaReportFormatter
         AppendErrors(text, analysis);
         AppendChanges(text, analysis);
         if (knowledge is not null) KnowledgeReportFormatter.Append(text, knowledge);
-        if (knowledge is not null) AppendHoming(text, knowledge.Homing);
         if (knowledge is not null) AppendIoMapCheck(text, knowledge.IoMap);
         if (knowledge is not null) AppendSides(text, knowledge.Sides);
         AppendWhereToLook(text, file, analysis, knowledge);
@@ -327,40 +326,6 @@ public static class SpidaReportFormatter
         {
             text.AppendLine($"      {entry.Display}");
         }
-    }
-
-    /// <summary>
-    /// The two side pullers homing apart. They home to sensors that define the axis zero, so a
-    /// sensor that has drifted from its target moves every position after it - with nothing in
-    /// the change log. This is how M21856's fixed side came to be 30 mm out.
-    /// </summary>
-    private static void AppendHoming(StringBuilder text, HomingFindings homing)
-    {
-        if (!homing.Any) return;
-
-        text.AppendLine();
-        text.AppendLine("THE TWO PULLERS DID NOT HOME TOGETHER");
-
-        foreach (var run in homing.Unbalanced)
-        {
-            text.AppendLine($"  {run.StartedAt:hh\\:mm\\:ss}  fixed {run.FixedSeconds:F2} s, floating {run.FloatingSeconds:F2} s "
-                            + $"- the {run.LateSide} side was {Math.Abs(run.Gap):F2} s late.");
-        }
-
-        var side = homing.Unbalanced[0].LateSide;
-        text.AppendLine();
-        text.AppendLine($"  {ReportText.Wrap("On a healthy machine the two finish homing in the same millisecond. Each "
-            + "trolley drives onto its aluminium block until the home sensor sees it, then backs slowly off - "
-            + "and the instant the sensor turns off is home. That edge sets where the machine thinks zero "
-            + "is, so if it lands in the wrong place every position afterwards is out by the same amount, "
-            + "with nothing in the change log because nothing was changed.", 2)}");
-        text.AppendLine();
-        text.AppendLine($"  Check the {side} side trolley home sensor:");
-        text.AppendLine("      - Send that gripper home (clear of timber and safe to move) and look at the sensor.");
-        text.AppendLine("      - It should sit 1-2 mm from the aluminium block. Too far and the point where it");
-        text.AppendLine("        turns off as the trolley backs away is no longer crisp, so home lands in the");
-        text.AppendLine("        wrong place and that side homes long.");
-        text.AppendLine("      - Does the operator report that side as out by a fixed amount? On M21856 it was 30 mm.");
     }
 
     /// <summary>
