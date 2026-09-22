@@ -250,3 +250,54 @@ public class ConfigPlatformTests
         Assert.Single(config.OffPlatformNonPrinters);
     }
 }
+
+public class ConfigAddressTests
+{
+    private static MachineConfig Parse(string body) =>
+        MachineConfigIo.Parse($"<?xml version=\"1.0\" encoding=\"utf-16\"?><Machine>{body}</Machine>");
+
+    private static string Point(string name, string port, string node, string addr) =>
+        $"<MainIO><AnalogInputs><{name}><InUse>true</InUse><Port>{port}</Port>"
+        + $"<NodeNum>{node}</NodeNum><Address>{addr}</Address></{name}></AnalogInputs></MainIO>";
+
+    /// <summary>
+    /// The Tornado writes its analogue addresses as "3:6" and, for one of the eight, "3.1".
+    /// Parsing them as a plain number fails, and the point was being dropped without a word -
+    /// which quietly lost FollowerDistance and InfeedLaserDistance, the two that matter most to
+    /// the infeed follower work.
+    /// </summary>
+    [Fact]
+    public void KeepsAnAddressWrittenWithAColon()
+    {
+        var config = Parse(
+            Point("FollowerDistance", "TCP192.168.50.5", "0", "3:8")
+            + Point("HorClampAirPressure", "TCP192.168.50.5", "0", "3.1"));
+
+        Assert.Equal(2, config.Fitted.Count());
+        Assert.Equal("TCP192.168.50.5-0.3.8", config.Fitted.Single(s => s.Name == "FollowerDistance").Address);
+        Assert.Equal("TCP192.168.50.5-0.3.1", config.Fitted.Single(s => s.Name == "HorClampAirPressure").Address);
+    }
+
+    /// <summary>
+    /// A colon in the PORT is a separate module with its own node and address tree, so
+    /// TCP192.168.50.2 and TCP192.168.50.2:2 are two different places and a point on each can
+    /// share a node and address without being the same point.
+    /// </summary>
+    [Fact]
+    public void AColonInThePortIsASeparateModule()
+    {
+        var config = Parse(
+            Point("OnModuleOne", "TCP192.168.50.2", "1", "1")
+            + Point("OnModuleTwo", "TCP192.168.50.2:2", "1", "1"));
+
+        var addresses = config.Fitted.Select(s => s.Address).ToList();
+
+        Assert.Equal(2, addresses.Distinct().Count());
+        Assert.Contains("TCP192.168.50.2-1.1", addresses);
+        Assert.Contains("TCP192.168.50.2:2-1.1", addresses);
+    }
+
+    [Fact]
+    public void AnAddressThatMakesNoSenseIsSkippedRatherThanGuessed() =>
+        Assert.Empty(Parse(Point("Nonsense", "TCP192.168.50.5", "0", "not-an-address")).Fitted);
+}

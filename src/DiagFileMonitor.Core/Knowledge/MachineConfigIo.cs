@@ -267,7 +267,7 @@ public static class MachineConfigIo
         }
 
         var kind = KindOf(path);
-        var address = Number(fields, "Address");
+        var address = Point(fields.GetValueOrDefault("Address", string.Empty));
         if (kind is null || node is null || address is null) return;
 
         var port = fields.GetValueOrDefault("Port", string.Empty).Trim();
@@ -277,10 +277,37 @@ public static class MachineConfigIo
             path[^1],
             string.Join(" / ", path),
             SideByRoot.GetValueOrDefault(path[0], MachineSide.Unknown),
-            $"{port}-{(int)node}.{(int)address}",
+            $"{port}-{(int)node}.{address}",
             Flag(fields, "InUse"),
             Flag(fields, "Inverted"),
             Flag(fields, "Simulate")));
+    }
+
+    /// <summary>
+    /// An address is usually a plain number, but the Tornado's analogue inputs are written
+    /// "3:6" - and one of the eight is written "3.1", so the file is not consistent with itself.
+    /// Both are kept as given rather than parsed to a single number, because parsing "3:6" as a
+    /// number fails and the point is then dropped without a word. That was quietly losing the
+    /// Tornado's eight analogue inputs, FollowerDistance and InfeedLaserDistance among them.
+    /// <para>
+    /// <b>Open:</b> whether "3:6" means module 3 point 6, the way the colon in a port like
+    /// TCP192.168.50.2:2 denotes a separate module with its own tree. Not assumed here.
+    /// </para>
+    /// </summary>
+    private static string? Point(string address)
+    {
+        var text = address.Trim();
+        if (text.Length == 0) return null;
+
+        if (int.TryParse(text, out var plain)) return plain.ToString();
+
+        var parts = text.Split(':', '.');
+
+        return parts.Length == 2
+               && int.TryParse(parts[0], out var module)
+               && int.TryParse(parts[1], out var point)
+            ? $"{module}.{point}"
+            : null;
     }
 
     private static SignalKind? KindOf(List<string> path)
