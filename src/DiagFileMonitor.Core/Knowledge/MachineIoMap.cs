@@ -149,10 +149,56 @@ public static class MachineIoMap
         new(SignalKind.Output, "IO-UpperGunUpperGoHigh", 2, new[] { "0.3", "1.7" }),
     };
 
+    /// <summary>
+    /// Wall Sheather - 24 named points across 67 numbers, because most things are fitted three
+    /// or five times rather than twice. Three bridge gun gantries and two bridge saws run over
+    /// the panel, so IO-GunFire exists five times and GunUp five times.
+    /// <para>
+    /// Read from one M20957 log, 06:02 to 14:54 on 22 September 2026 at Trusstech, which the
+    /// operator marked "good panel". One machine, one day - a short log, so this is what that
+    /// day used and not everything the machine has.
+    /// </para>
+    /// <para>
+    /// <b>Nails are not in the I/O.</b> The machine loads a firing pattern per gun - "LoadGunFire,
+    /// Bridge1 Gun, Firstpos 138.75 Spacing 143.6765" - and then logs one FireSeqCompeted per
+    /// row. A whole row of nails is one line. Counting IO-GunFire edges gives nothing like the
+    /// nail count, so the count comes from Reports/LatestReport.txt instead.
+    /// </para>
+    /// </summary>
+    public static readonly IReadOnlyList<KnownSignal> WallSheather = new KnownSignal[]
+    {
+        new(SignalKind.Input, "GunNotRotated", 3, new[] { "2.6", "3.1", "3.12" }),
+        new(SignalKind.Input, "GunRotated", 3, new[] { "2.7", "3.2", "3.13" }),
+        new(SignalKind.Input, "GunUp", 5, new[] { "1.8", "2.0", "2.10", "3.5", "4.0" }),
+        new(SignalKind.Input, "HorizStudClampDown", 2, new[] { "1.4", "1.12" }),
+        new(SignalKind.Input, "LockedRotation", 3, new[] { "2.8", "3.3", "3.14" }),
+        new(SignalKind.Input, "SawNotRotated", 2, new[] { "5.0", "5.5" }),
+        new(SignalKind.Input, "SawRotationLocked", 2, new[] { "5.3", "5.8" }),
+        new(SignalKind.Input, "StudPinDown", 2, new[] { "1.3", "1.11" }),
+        new(SignalKind.Input, "StudPinUp", 2, new[] { "1.2", "1.10" }),
+        new(SignalKind.Input, "UnlockedRotation", 3, new[] { "2.9", "3.4", "3.15" }),
+        new(SignalKind.Input, "Up10mm", 3, new[] { "2.12", "3.7", "4.2" }),
+        new(SignalKind.Output, "IO-GunAir", 1, new[] { "20.20" }),
+        new(SignalKind.Output, "IO-GunDown", 5, new[] { "1.1", "1.6", "4.9", "5.9", "6.9" }),
+        new(SignalKind.Output, "IO-GunFire", 5, new[] { "1.2", "1.7", "1.12", "1.13", "1.14" }),
+        new(SignalKind.Output, "IO-GunNotRotate", 3, new[] { "4.1", "5.1", "6.1" }),
+        new(SignalKind.Output, "IO-GunUp", 5, new[] { "1.0", "1.5", "4.8", "5.8", "6.8" }),
+        new(SignalKind.Output, "IO-GunUpperDown", 1, new[] { "20.0" }),
+        new(SignalKind.Output, "IO-GunUpperUp", 1, new[] { "20.0" }),
+        new(SignalKind.Output, "IO-HorizStudClamp", 2, new[] { "1.4", "1.9" }),
+        new(SignalKind.Output, "IO-Lift10mm", 3, new[] { "4.10", "5.10", "6.10" }),
+        new(SignalKind.Output, "IO-RamLock", 3, new[] { "4.6", "5.6", "6.6" }),
+        new(SignalKind.Output, "IO-RotateLock", 3, new[] { "4.4", "5.4", "6.4" }),
+        new(SignalKind.Output, "IO-SawNotRotate", 2, new[] { "3.1", "3.3" }),
+        new(SignalKind.Output, "IO-StudPinUp", 3, new[] { "1.3", "1.8", "20.0" }),
+    };
+
     private static readonly (string Prefix, IReadOnlyList<KnownSignal> Points)[] ByModel =
     {
         ("RakingWallExtruderV3", RakedWallExtruderV3),
-        ("RakedWallExtruderV3", RakedWallExtruderV3)
+        ("RakedWallExtruderV3", RakedWallExtruderV3),
+        ("WallSheather", WallSheather),
+        ("WallSheath", WallSheather)
     };
 
     /// <summary>
