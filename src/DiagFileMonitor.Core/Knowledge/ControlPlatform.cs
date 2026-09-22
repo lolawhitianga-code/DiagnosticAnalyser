@@ -123,10 +123,17 @@ public static class ControlPlatformCheck
         return head.Count(c => c == '.') == 3 ? ControlPlatform.Omron : ControlPlatform.Unknown;
     }
 
-    /// <summary>The module and bit, with whatever transport prefix stripped off.</summary>
-    public static string Point(string address)
+    /// <summary>
+    /// The node and address, with the port stripped off. Spida's terms: an address like
+    /// <c>TCP192.168.50.5-3.6</c> is port 192.168.50.5, node 3, address 6, and it is the node and
+    /// address a technician reads off the cabinet.
+    /// </summary>
+    public static string NodeAndAddress(string address)
     {
         var dash = address.LastIndexOf('-');
         return dash >= 0 && dash < address.Length - 1 ? address[(dash + 1)..] : address;
     }
+
+    /// <summary>Kept for callers that still say Point; the same thing.</summary>
+    public static string Point(string address) => NodeAndAddress(address);
 }

@@ -261,21 +261,34 @@ public class ConfigAddressTests
         + $"<NodeNum>{node}</NodeNum><Address>{addr}</Address></{name}></AnalogInputs></MainIO>";
 
     /// <summary>
-    /// The Tornado writes its analogue addresses as "3:6" and, for one of the eight, "3.1".
-    /// Parsing them as a plain number fails, and the point was being dropped without a word -
-    /// which quietly lost FollowerDistance and InfeedLaserDistance, the two that matter most to
-    /// the infeed follower work.
+    /// "3:6" is node 3, address 6 - the field carries its own node and the NodeNum element
+    /// beside it reads 0 and means nothing. One of the Tornado's eight analogues is written
+    /// "3.1" instead, so both separators read the same way.
+    /// <para>
+    /// Parsing them as a plain number fails and the point is then dropped without a word, which
+    /// lost all eight analogues including FollowerDistance and InfeedLaserDistance - the two
+    /// that matter most to the infeed follower work.
+    /// </para>
     /// </summary>
     [Fact]
-    public void KeepsAnAddressWrittenWithAColon()
+    public void AnAddressCarryingItsOwnNodeOverridesNodeNum()
     {
         var config = Parse(
             Point("FollowerDistance", "TCP192.168.50.5", "0", "3:8")
             + Point("HorClampAirPressure", "TCP192.168.50.5", "0", "3.1"));
 
         Assert.Equal(2, config.Fitted.Count());
-        Assert.Equal("TCP192.168.50.5-0.3.8", config.Fitted.Single(s => s.Name == "FollowerDistance").Address);
-        Assert.Equal("TCP192.168.50.5-0.3.1", config.Fitted.Single(s => s.Name == "HorClampAirPressure").Address);
+        Assert.Equal("TCP192.168.50.5-3.8", config.Fitted.Single(s => s.Name == "FollowerDistance").Address);
+        Assert.Equal("TCP192.168.50.5-3.1", config.Fitted.Single(s => s.Name == "HorClampAirPressure").Address);
+    }
+
+    /// <summary>A plain address still takes its node from NodeNum beside it.</summary>
+    [Fact]
+    public void APlainAddressTakesItsNodeFromNodeNum()
+    {
+        var config = Parse(Point("RackLockOff", "192.168.250.1", "2", "9"));
+
+        Assert.Equal("192.168.250.1-2.9", Assert.Single(config.Fitted).Address);
     }
 
     /// <summary>

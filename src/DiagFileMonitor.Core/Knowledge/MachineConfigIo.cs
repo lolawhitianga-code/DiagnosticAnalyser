@@ -7,7 +7,7 @@ namespace DiagFileMonitor.Core.Knowledge;
 /// <summary>One I/O point as the machine's own configuration defines it.</summary>
 /// <param name="Name">The leaf element name, e.g. PlateSupportDown.</param>
 /// <param name="Path">Where it sits, e.g. FixedSide / Inputs / PlateSupportDown.</param>
-/// <param name="Address">Port, node and address joined the way the log writes them.</param>
+/// <param name="Address">Port, node and address joined the way the log writes them - TCP192.168.50.5-3.6 is port 192.168.50.5, node 3, address 6.</param>
 /// <param name="Fitted">InUse. False means this machine does not have it at all.</param>
 /// <param name="Inverted">The signal is read the other way up.</param>
 /// <param name="Simulated">Faked in software - it is not a real sensor on this machine.</param>
@@ -267,8 +267,8 @@ public static class MachineConfigIo
         }
 
         var kind = KindOf(path);
-        var address = Point(fields.GetValueOrDefault("Address", string.Empty));
-        if (kind is null || node is null || address is null) return;
+        var where = Where(fields.GetValueOrDefault("Address", string.Empty), (int?)node);
+        if (kind is null || where is null) return;
 
         var port = fields.GetValueOrDefault("Port", string.Empty).Trim();
 
@@ -277,36 +277,41 @@ public static class MachineConfigIo
             path[^1],
             string.Join(" / ", path),
             SideByRoot.GetValueOrDefault(path[0], MachineSide.Unknown),
-            $"{port}-{(int)node}.{address}",
+            $"{port}-{where.Value.Node}.{where.Value.Address}",
             Flag(fields, "InUse"),
             Flag(fields, "Inverted"),
             Flag(fields, "Simulate")));
     }
 
     /// <summary>
-    /// An address is usually a plain number, but the Tornado's analogue inputs are written
-    /// "3:6" - and one of the eight is written "3.1", so the file is not consistent with itself.
-    /// Both are kept as given rather than parsed to a single number, because parsing "3:6" as a
-    /// number fails and the point is then dropped without a word. That was quietly losing the
-    /// Tornado's eight analogue inputs, FollowerDistance and InfeedLaserDistance among them.
+    /// Reads an Address field into a node and an address.
     /// <para>
-    /// <b>Open:</b> whether "3:6" means module 3 point 6, the way the colon in a port like
-    /// TCP192.168.50.2:2 denotes a separate module with its own tree. Not assumed here.
+    /// Usually the field is a plain address and the node comes from NodeNum beside it. But the
+    /// Tornado's analogue inputs are written "3:6", and that is <b>node 3, address 6</b> - the
+    /// field carries its own node, and the NodeNum element beside it reads 0 and means nothing.
+    /// One of the eight is written "3.1" instead, so the file is not consistent with itself and
+    /// both separators have to be read the same way.
+    /// </para>
+    /// <para>
+    /// Getting this wrong is not harmless: parsing "3:6" as a plain number fails and the point is
+    /// dropped without a word, which was losing all eight of the Tornado's analogues -
+    /// FollowerDistance and InfeedLaserDistance among them.
     /// </para>
     /// </summary>
-    private static string? Point(string address)
+    private static (int Node, int Address)? Where(string address, int? nodeNum)
     {
         var text = address.Trim();
         if (text.Length == 0) return null;
 
-        if (int.TryParse(text, out var plain)) return plain.ToString();
+        if (int.TryParse(text, out var plain))
+            return nodeNum is null ? null : ((int)nodeNum, plain);
 
         var parts = text.Split(':', '.');
 
         return parts.Length == 2
-               && int.TryParse(parts[0], out var module)
+               && int.TryParse(parts[0], out var node)
                && int.TryParse(parts[1], out var point)
-            ? $"{module}.{point}"
+            ? (node, point)
             : null;
     }
 
