@@ -286,6 +286,9 @@ ATTACHED
 - **Only bad days.** I cannot tell abnormal from normal without normal. This is why the report
   now establishes what normal looks like before it reads the end of the log.
 - **Bundles with no issue text.** See M21844.
+- **Reading the software version off a screenshot.** SDN shows its own version in the title bar
+  whatever files it has open, so a screenshot taken on a support laptop reports the laptop, not
+  the machine. The version comes from the bundle.
 - **A wiring diagram would be better than all of it.** If an I/O manifest or electrical schedule
   exists for any of these models, that replaces Steps 1 and 2 entirely and turns "inferred" into
   "confirmed". I have been rebuilding from logs something that may well already be on a drawing.

@@ -63,12 +63,22 @@ and two saws. `IO-GunFire` exists five times; `GunUp` five times; `IO-GunNotRota
 That is the clearest case yet for the list being names rather than numbers - an address-led map
 would have been 67 unrelated rows.
 
-## Two things worth checking
+## A note on versions, and where not to read them
 
-1. **Version.** The HMI title bar in the screenshot reads **V2.6.0.0**; the bundle reports
-   **V2.3.0.0**. One of them is stale. Worth knowing which, because the version is what a support
-   answer gets pinned to.
-2. **This is one panel.** A labelled good one, which is worth a great deal - but a baseline
-   properly wants many. `LatestReport.txt` only carries the most recent, so the weekly
-   `ProdLogV2` / `ShiftLog` files off this machine would turn this into a real distribution, the
-   way M20771's 271 shifts did for the Raked Extruder.
+The machine is on **V2.3.0.0**, which is what the bundle says.
+
+A screenshot of this job showed **V2.6.0.0** in the title bar, and that is not the machine - it is
+the copy of SDN on the support laptop the files were opened with. SDN puts its own version in the
+title bar whatever it is looking at.
+
+So: **the version comes from the bundle, never from a screenshot of the HMI.** A screenshot taken
+on a support machine reports the support machine. This is worth remembering because the version is
+what a support answer gets pinned to, and getting it wrong sends somebody chasing a fix that is
+not in the build the customer is running.
+
+## This is one panel
+
+A labelled good one, which is worth a great deal - but a baseline properly wants many.
+`LatestReport.txt` only carries the most recent, so the weekly `ProdLogV2` / `ShiftLog` files off
+this machine would turn this into a real distribution, the way M20771's 271 shifts did for the
+Raked Extruder.
