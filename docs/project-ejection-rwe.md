@@ -42,34 +42,44 @@ a far tighter sequence than the reload, and a good starting point to standardise
 
 ---
 
-## 2. Safe vs normal - now measurable, and all 302 are normal
+## 2. Safe vs normal - the test, and why it is unambiguous
 
 Per the description:
 
-- **Normal** - grippers to 6040, release, then ejectors drive positive **while** grippers drive
-  negative at the same time.
-- **Safe** - grippers to 6040, release, grippers drive to 400 **and finish**, then the ejectors
-  drive positive.
+- **Normal** - grippers to 6040, release, then the ejectors drive positive **while** the grippers
+  drive negative at the same time.
+- **Safe** - grippers to 6040, release, grippers drive back **and arrive**, then the ejectors go.
 
-So the discriminator is the gap between the puller retract command and the ejector push command.
+Both use the same targets. The pullers go 6000 then 1200 in every ejection here; the 400 move
+belongs to the reload and never appears inside an ejection (0 of 308). So the difference is
+**purely timing**, and the test is: does the ejector command wait for the puller to arrive?
 
-| Machine | Ejections | Ejector push after puller retract | Overlapped |
+Arrival is reported on the **Node** lines, not the named axes. `FixedSidePuller` and
+`FloatingSidePuller` only ever report Axis Disabled or Axis Reset - the OK comes from
+`Node0 Status` / `Node1 Status`.
+
+| Machine | Pullers 6000→1200 take | Ejectors commanded at | Gap |
 |---|---|---|---|
-| M21737 | 138 | median **+0.42 s** (+0.42 to +0.45) | 138/138 |
-| M21844 | 138 | median **+0.23 s** (+0.12 to +26.40) | 136/138 |
-| M20771 | 26 | median **+0.48 s** (+0.24 to +0.49) | 26/26 |
+| M21737 | **10.05 s** | 0.42 s | ejectors go 9.6 s early |
+| M21844 | **8.69 s** | 0.17 s | 8.5 s early |
+| M20771 | **16.32 s** | 0.46 s | 15.9 s early |
 
-**300 of 302 ejections are normal.** The push follows the retract by under half a second - they
-are running together, not one after the other.
+So on this data a normal ejection puts the ejector command at **0.2-0.5 s** and a safe one would
+put it at **8.7-16.3 s**. There is nothing in between. **Anything over 3 seconds is a safe
+ejection**; under 1 second is normal.
 
-**A safe ejection has not been observed once in any of these logs.** Either it is rare, or it is
-not enabled on these three machines, or it is triggered by a panel type none of these days
-produced. That is question 1.
+**All 302 timed ejections are normal.** Not one safe ejection in any of these logs.
 
-The pullers go to **6000**, not 6040, on all three machines. Worth confirming whether 6040 is the
-spec and 6000 what is actually commanded, or whether the number varies by machine.
+Two things worth noting from the same measurement:
 
----
+- **M20771's pullers take 16.3 s where M21844's take 8.7 s** - nearly double, for what should be
+  the same 6000→1200 travel. Speed setting, or a different machine geometry? Open.
+- The pullers go to **6000**, not 6040, on all three machines.
+
+*Inferred, not confirmed:* that `Node0` and `Node1` are the two side pullers. All of Node0-3 start
+moving within a second of the puller command because the ejectors follow 0.2 s later, so the
+nodes cannot be separated on that alone. Node0/1 report OK first and the ejectors travel further,
+which fits, but the PLC would settle it.
 
 ## 3. Staged release is staged by SIDE, not by upper/lower
 
@@ -134,6 +144,9 @@ That is worth 4.5 s × every panel on M21844.
 
 ## Changelog
 
+- **2026-09-22** - Safe/normal test sharpened: both use the same targets, so the discriminator is
+  whether the ejector command waits for the pullers to arrive. Pullers take 8.7-16.3 s; ejectors
+  are commanded at 0.2-0.5 s. A 3 second threshold separates the two cleanly.
 - **2026-09-22** - Opened, then corrected. First pass documented the 300-series reload as the
   ejection; the ejection is the 2000-series. Staged release found to be by side, not upper/lower,
   with the floating side first in 302 of 302. All 302 timed ejections are normal, not safe.
