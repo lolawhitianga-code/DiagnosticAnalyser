@@ -19,7 +19,15 @@ public record ConfiguredSignal(
     string Address,
     bool Fitted,
     bool Inverted,
-    bool Simulated);
+    bool Simulated,
+    bool SubsystemFitted = true)
+{
+    /// <summary>
+    /// Actually on this machine. A point can be InUse inside a subsystem the machine does not
+    /// have - the file carries the definitions either way - so both have to be true.
+    /// </summary>
+    public bool OnThisMachine => Fitted && SubsystemFitted;
+}
 
 /// <summary>An axis, and which node it answers on.</summary>
 public record ConfiguredAxis(string Name, int Node, string Port, double Velocity, double Accel, double Scale);
@@ -31,7 +39,14 @@ public record MachineConfig(
 {
     public bool Any => Signals.Count > 0;
 
-    public IEnumerable<ConfiguredSignal> Fitted => Signals.Where(s => s.Fitted);
+    public IEnumerable<ConfiguredSignal> Fitted => Signals.Where(s => s.OnThisMachine);
+
+    /// <summary>The subsystem flags at the root, e.g. MajorSubFitted, CClampsFitted.</summary>
+    public IReadOnlyDictionary<string, bool> Subsystems { get; init; } =
+        new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Points defined in the file for kit this machine does not have.</summary>
+    public int DefinedButNotOnThisMachine => Signals.Count(s => s.Fitted && !s.SubsystemFitted);
 
     /// <summary>
     /// The port carrying most of the machine's I/O. The log's NodeN Status lines come from this
@@ -144,12 +159,30 @@ public static class MachineConfigIo
         var signals = new List<ConfiguredSignal>();
         var axes = new List<ConfiguredAxis>();
 
+        // Subsystem flags sit at the root: MajorSubFitted, CClampsFitted, CenterGunFitted and so
+        // on. The file defines every point of every option whether or not the machine has it, so
+        // these gate the lot. M21844 carries 21 MajorSubInfeed points all marked InUse and has no
+        // infeed at all - MajorSubFitted is false.
+        var subsystems = root.Elements()
+            .Where(e => e.Name.LocalName.EndsWith("Fitted", StringComparison.Ordinal))
+            .ToDictionary(
+                e => e.Name.LocalName[..^"Fitted".Length],
+                e => (e.Value ?? string.Empty).Trim().Equals("true", StringComparison.OrdinalIgnoreCase),
+                StringComparer.OrdinalIgnoreCase);
+
         Walk(root, new List<string>(), signals, axes);
 
+        var gated = signals
+            .Select(s => s with { SubsystemFitted = SubsystemOf(s.Path, subsystems) })
+            .ToList();
+
         return new MachineConfig(
-            signals,
+            gated,
             axes,
-            signals.Select(s => Port(s.Address)).Where(p => p.Length > 0).Distinct().ToList());
+            gated.Select(s => Port(s.Address)).Where(p => p.Length > 0).Distinct().ToList())
+        {
+            Subsystems = subsystems
+        };
     }
 
     private static void Walk(
@@ -218,6 +251,28 @@ public static class MachineConfigIo
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Whether the option a point belongs to is fitted. Matched on the leading path segment -
+    /// MajorSubInfeed and MajorSubLifter are both gated by MajorSubFitted, CClamp by
+    /// CClampsFitted. A section with no matching flag is taken as fitted, because most of the
+    /// machine has no flag and gating it away would empty the list.
+    /// </summary>
+    private static bool SubsystemOf(string path, IReadOnlyDictionary<string, bool> flags)
+    {
+        var head = path.Split(' ').FirstOrDefault() ?? string.Empty;
+        head = head.Split('/')[0].Trim();
+
+        foreach (var (name, fitted) in flags)
+        {
+            var stem = name.TrimEnd('s');
+            if (head.StartsWith(stem, StringComparison.OrdinalIgnoreCase)
+                || head.Equals(name, StringComparison.OrdinalIgnoreCase))
+                return fitted;
+        }
+
+        return true;
     }
 
     private static string Port(string address)

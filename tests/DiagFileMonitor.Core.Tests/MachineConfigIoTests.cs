@@ -10,6 +10,9 @@ public class MachineConfigIoTests
     private const string Config = """
         <?xml version="1.0" encoding="utf-16"?>
         <WallExtruder>
+          <StickGunsFitted>true</StickGunsFitted>
+          <MajorSubFitted>false</MajorSubFitted>
+          <ControlBox2Fitted>true</ControlBox2Fitted>
           <CommonIO>
             <Inputs>
               <RackLockOff>
@@ -99,9 +102,9 @@ public class MachineConfigIoTests
         Assert.True(Read().Signals.Single(s => s.Name == "SideClamp").Inverted);
 
     /// <summary>
-    /// One machine runs more than one controller and they reuse node numbers. FixedSide's plate
-    /// support down and the infeed's bay 1 prox are both node 1 address 1 - on different ports.
-    /// Matching on node and address alone lays one on top of the other.
+    /// Definitions reuse node numbers across controllers. FixedSide's plate support down and the
+    /// infeed's bay 1 prox are both node 1 address 1, on different ports. Matching on node and
+    /// address alone lays one on top of the other.
     /// </summary>
     [Fact]
     public void KeepsPointsOnDifferentPortsApart()
@@ -113,7 +116,46 @@ public class MachineConfigIoTests
 
         Assert.Equal("192.168.250.1-1.1", plate.Address);
         Assert.Equal("TCP192.168.50.2:2-1.1", bay.Address);
-        Assert.NotEqual(plate.Address, bay.Address);
+    }
+
+    /// <summary>
+    /// The file defines every option whether the machine has it or not, so InUse on its own is
+    /// not "this machine has one". M21844 carries 21 MajorSubInfeed points all marked InUse and
+    /// has no infeed - MajorSubFitted is false. Reading InUse alone invents a whole subsystem,
+    /// and with it a second controller the machine does not have.
+    /// </summary>
+    [Fact]
+    public void AnOptionThatIsNotFittedIsNotOnTheMachine()
+    {
+        var config = Read();
+
+        var bay = config.Signals.Single(s => s.Name == "Bay1Prox");
+
+        Assert.True(bay.Fitted);
+        Assert.False(bay.SubsystemFitted);
+        Assert.False(bay.OnThisMachine);
+        Assert.DoesNotContain(config.Fitted, s => s.Name == "Bay1Prox");
+        Assert.Equal(1, config.DefinedButNotOnThisMachine);
+    }
+
+    [Fact]
+    public void ReadsTheOptionFlags()
+    {
+        var config = Read();
+
+        Assert.False(config.Subsystems["MajorSub"]);
+        Assert.True(config.Subsystems["ControlBox2"]);
+        Assert.True(config.Subsystems["StickGuns"]);
+    }
+
+    /// <summary>Most of the machine has no option flag, and must not be gated away.</summary>
+    [Fact]
+    public void AnythingWithNoOptionFlagStaysOnTheMachine()
+    {
+        var config = Read();
+
+        Assert.Contains(config.Fitted, s => s.Name == "PlateSupportDown");
+        Assert.Contains(config.Fitted, s => s.Name == "RackLockOff");
     }
 
     /// <summary>
