@@ -1,19 +1,40 @@
-# Raked Wall Extruder V3 - I/O list
+# Raked Wall Extruder V3 - what it has
 
-Read from two machines:
+**48 named points. 35 of them fitted twice, one per side.**
 
-- **M21737**, 82,149 lines, 04:07 to 13:51 on 27 July 2026 - 38,447 I/O changes.
-- **M21844** (PlaceMakers Wiri), 84,360 lines, 04:32 to 12:50 on 8 September 2026 - 40,405 I/O
-  changes.
+Read from three machines: M21737 (82,149 lines), M21844 (84,360) and M20771 (eleven exports
+across nineteen months). All three agree on every name.
 
-**83 points: 43 inputs, 40 outputs.** Addresses are `IP-module.bit`.
+## The name is the identity, the number is not
 
-Every point found on M21737 appears on M21844 **at the same address**, which is the only
-reason this is worth relying on. M21844 exercised 8 points M21737 never did (the gun-lift
-group, a second THNTD, and a Control Box input); those are listed at the bottom.
+They do **not** all agree on the numbering, and that is normal. `UpperGunUpperIsLow` sits at
+`0.19` on M21737 and M21844 and at `0.18` on M20771. Some Wall Extruder DGs run a point on node
+5 and some on node 6. None of that is a fault.
 
-Confidence: **inferred**. Two machines, two logs, still no wiring diagram. A point neither
-machine used on its day is not here.
+So this list says what the machine **has**. What each point is numbered is read off the log in
+front of you, and the app now prints exactly that - the name, and this machine's own numbers:
+
+```
+  OUTPUTS
+      IO-HorizStudClamp            4.12 floating, 4.13 fixed
+      IO-PlateClamp                4.4 fixed, 4.5 floating
+      IO-RackLock                  0.1 shared
+```
+
+The same applies across control systems. CLX and Omron builds of a model have the same names and
+different numbering - CLX writes `COM7-6.5` on the older serial protocol and
+`TCP192.168.50.2-3.17` since the move to TCP, Omron writes a bare `192.168.250.1-4.2`. The
+transport prefix is stripped before anything is compared.
+
+## What is still worth flagging
+
+A name the model has that **never moved in this log**. A log records changes, so a sensor that
+never came on and a sensor that is not fitted look identical - and that is the gap that cost us
+the M21737 case, where a plate support that never came down left no trace at all.
+
+What is deliberately **not** said is where the missing one is numbered. That was the original
+mistake: an offset read off three pairs predicted `0.3`, the real address was `2.7`, and on the
+next machine it would have been different again.
 
 ## Sides
 

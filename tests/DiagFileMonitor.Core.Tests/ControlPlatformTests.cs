@@ -8,16 +8,16 @@ public class ControlPlatformTests
     private static PlatformFinding Detect(params string[] lines) =>
         ControlPlatformCheck.Detect(MachineLogFile.Parse(lines));
 
-    /// <summary>The shape seen on M20716, M21737 and M21844.</summary>
+    /// <summary>The Omron shape: bare IP addresses and numbered EtherCAT nodes.</summary>
     [Fact]
-    public void ReadsTheNetworkAddressedPlatform()
+    public void ReadsTheOmronPlatform()
     {
         var found = Detect(
             "05:14:58.0680108,  OutputChange, IO-PlatePresentBypass,  Output (192.168.250.1-0.0) Set On",
             "05:14:58.2537957,  InputChange, EStop,  Input (192.168.250.1-4.0) Changed to 0",
             "05:14:57.8569101,  MotionEvent, Node0 Status,  Needs to be Homed");
 
-        Assert.Equal(ControlPlatform.NetworkNodes, found.Platform);
+        Assert.Equal(ControlPlatform.Omron, found.Platform);
         Assert.Contains("node status", found.Evidence, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -26,14 +26,14 @@ public class ControlPlatformTests
     /// rather than as numbered nodes.
     /// </summary>
     [Fact]
-    public void ReadsTheSerialPortPlatform()
+    public void ReadsTheOlderComPortClx()
     {
         var found = Detect(
             "11:19:29.6787630,  OutputChange, LowerGunFire,  Output (COM7-6.5) Set On",
             "11:19:29.7000000,  InputChange, StudPinDown,  Input (COM7-2.3) Changed to 1",
             "11:19:30.0000000,  MotionEvent, TrolleyHeight Status,  OK");
 
-        Assert.Equal(ControlPlatform.SerialPort, found.Platform);
+        Assert.Equal(ControlPlatform.Clx, found.Platform);
         Assert.True(found.Known);
     }
 
@@ -54,9 +54,9 @@ public class ControlPlatformTests
     }
 
     [Theory]
-    [InlineData("192.168.250.1-4.2", ControlPlatform.NetworkNodes)]
-    [InlineData("COM7-6.5", ControlPlatform.SerialPort)]
-    [InlineData("com12-0.1", ControlPlatform.SerialPort)]
+    [InlineData("192.168.250.1-4.2", ControlPlatform.Omron)]
+    [InlineData("COM7-6.5", ControlPlatform.Clx)]
+    [InlineData("com12-0.1", ControlPlatform.Clx)]
     [InlineData("something-else", ControlPlatform.Unknown)]
     public void ReadsThePlatformOffAnAddress(string address, ControlPlatform expected) =>
         Assert.Equal(expected, ControlPlatformCheck.OfAddress(address));
@@ -69,7 +69,7 @@ public class TcpPlatformTests
     /// and axes report under their own names, which is neither of the other two shapes.
     /// </summary>
     [Fact]
-    public void ReadsTheTcpAddressedPlatform()
+    public void ReadsTheTcpClx()
     {
         var found = ControlPlatformCheck.Detect(MachineLogFile.Parse(new[]
         {
@@ -78,8 +78,8 @@ public class TcpPlatformTests
             "08:45:30.8522097,  MotionEvent, Axis-InfeedFollower,  Homing"
         }));
 
-        Assert.Equal(ControlPlatform.TcpAddressed, found.Platform);
-        Assert.Equal(ControlPlatform.TcpAddressed, ControlPlatformCheck.OfAddress("TCP192.168.50.2-3.17"));
+        Assert.Equal(ControlPlatform.Clx, found.Platform);
+        Assert.Equal(ControlPlatform.Clx, ControlPlatformCheck.OfAddress("TCP192.168.50.2-3.17"));
     }
 
     /// <summary>
@@ -87,7 +87,7 @@ public class TcpPlatformTests
     /// platform - which would hand a Tornado the Raked Extruder's map.
     /// </summary>
     [Fact]
-    public void ATcpAddressIsNotReadAsABareNetworkAddress()
+    public void ATcpAddressIsNotReadAsAnOmronOne()
     {
         var found = ControlPlatformCheck.Detect(MachineLogFile.Parse(new[]
         {
@@ -95,7 +95,7 @@ public class TcpPlatformTests
             "08:45:27.0000000,  OutputChange, IO-Thing2,  Output (TCP192.168.50.2-3.18) Set On"
         }));
 
-        Assert.NotEqual(ControlPlatform.NetworkNodes, found.Platform);
-        Assert.Empty(MachineIoMap.For("RakingWallExtruderV3DG", ControlPlatform.TcpAddressed));
+        Assert.Equal(ControlPlatform.Clx, found.Platform);
+        Assert.Equal(AddressTransport.Tcp, found.Transport);
     }
 }

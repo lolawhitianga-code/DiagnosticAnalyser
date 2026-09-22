@@ -93,11 +93,12 @@ public class KnowledgeFindings
     /// Which control system this machine is built on. Every model ships in two versions with
     /// different addresses, so nothing address-specific is applied until this is established.
     /// </summary>
-    public PlatformFinding Platform { get; init; } = new(ControlPlatform.Unknown, "not read", 0);
+    public PlatformFinding Platform { get; init; } = new(ControlPlatform.Unknown, AddressTransport.Unknown, "not read", 0);
 
     /// <summary>This machine's I/O held against the map for its model.</summary>
     public IoMapFindings IoMap { get; init; } =
-        new(0, 0, 0, Array.Empty<AddressDisagreement>(), Array.Empty<SignalId>(), Array.Empty<SharedAddress>());
+        new(Array.Empty<PointHere>(), Array.Empty<PointHere>(), Array.Empty<SignalId>(),
+            Array.Empty<SharedAddress>(), 0);
 
     /// <summary>Output addresses named and sided from CloudLog/maint_data.json, where it is there.</summary>
     public SideFindings? Sides { get; init; }
@@ -148,9 +149,8 @@ public static class KnowledgeAnnotator
         var cutNotTaken = CutNotTakenCheck.Check(machineLog);
         var platform = ControlPlatformCheck.Detect(machineLog);
         var timeline = IoTimeline.Build(machineLog);
-        var ioMap = IoMapComparison.Check(timeline, machineModel ?? analysis.MachineModelFromLog, platform.Platform);
-        var waitingOn = WaitingOnCheck.Check(
-            machineLog, machineModel ?? analysis.MachineModelFromLog, platform.Platform);
+        var ioMap = IoMapComparison.Check(timeline, machineModel ?? analysis.MachineModelFromLog);
+        var waitingOn = WaitingOnCheck.Check(machineLog, machineModel ?? analysis.MachineModelFromLog);
         var floatingHead = FloatingHeadCheck.Check(machineLog);
         var guards = GuardStopLedger.Check(machineLog, floatingHead);
         var stuck = StuckStepCheck.Check(machineLog);

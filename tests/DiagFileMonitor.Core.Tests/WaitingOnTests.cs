@@ -17,7 +17,7 @@ public class WaitingOnTests
 
     /// <summary>
     /// The pairs this machine really logs. Every one is the same bit two lower on the module
-    /// below, which is what lets the missing partner's address be worked out.
+    /// below - which is what the old offset guess leaned on, and why it was wrong.
     /// </summary>
     private static readonly string[] RealPairs =
     {
@@ -57,26 +57,49 @@ public class WaitingOnTests
         Assert.True(signal.On);
     }
 
+    /// <summary>
+    /// The finding, stated the way it can actually be stood behind: this model fits two plate
+    /// support down sensors and only one moved, so the other never came on. Where the other one
+    /// is numbered on THIS machine is not claimed - that is what went wrong the first time, when
+    /// an offset read off three pairs said 0.3 and the real answer was 2.7 on one machine and
+    /// something else again on the next.
+    /// </summary>
     [Fact]
-    public void WorksOutWhereTheMissingPartnerWouldBe()
+    public void KnowsAPartnerIsMissingWithoutClaimingItsNumber()
     {
-        // The whole finding. Every pair on this machine is the same bit two lower on the module
-        // below - 1.8 with 0.10, 1.6 with 0.8, 1.4 with 0.6 - so the partner of 1.1 is 0.3, and
-        // 0.3 never appears anywhere in the log. An input that never came on leaves no trace.
-        var signal = Assert.Single(Check(TheRealCase()).Named);
+        var signal = Assert.Single(
+            WaitingOnCheck.Check(MachineLogFile.Parse(TheRealCase()), "RakingWallExtruderV3DG").Named);
 
         Assert.True(signal.PartnerMissing);
-        Assert.Equal("192.168.250.1-0.3", signal.MissingPartnerAddress);
+        Assert.Equal(2, signal.InstancesOnThisModel);
+        Assert.Equal(1, signal.AddressesForThisName);
+        Assert.True(signal.PartnerFromTheMap);
     }
 
+    /// <summary>Both sides moved, so nothing is missing.</summary>
     [Fact]
-    public void AnAddressAlreadyInUseIsNotAMissingPartner()
+    public void BothSidesMovingIsNotAMissingPartner()
     {
-        var findings = Check(TheRealCase()
-            .Append("07:50:00.000,  InputChange, SomethingElse,  Input (192.168.250.1-0.3) Changed to 1")
-            .ToArray());
+        var findings = WaitingOnCheck.Check(
+            MachineLogFile.Parse(RealPairs
+                .Append("07:49:30.000,  InputChange, PlateSupportDown,  Input (192.168.250.1-1.1) Changed to 1")
+                .Append("07:49:31.000,  InputChange, PlateSupportDown,  Input (192.168.250.1-2.7) Changed to 1")
+                .Append(TheMessage)
+                .ToArray()),
+            "RakingWallExtruderV3DG");
 
-        Assert.False(Assert.Single(findings.Named).PartnerMissing);
+        Assert.Equal(2, findings.Named.Count);
+        Assert.All(findings.Named, signal => Assert.False(signal.PartnerMissing));
+    }
+
+    /// <summary>
+    /// With no list for the model there is nothing to say how many are fitted, so it does not
+    /// guess that one is missing.
+    /// </summary>
+    [Fact]
+    public void AModelWithNoListDoesNotGuessAtAMissingPartner()
+    {
+        Assert.False(Assert.Single(Check(TheRealCase()).Named).PartnerMissing);
     }
 
     [Fact]
@@ -183,174 +206,103 @@ public class WaitingOnTests
 /// </summary>
 public class MachineIoMapTests
 {
+    /// <summary>
+    /// 83 addresses across three machines collapse to 48 named things, 35 of them fitted twice.
+    /// That is the list worth handing a technician - what the machine has, not what one of them
+    /// happened to number it.
+    /// </summary>
     [Fact]
-    public void KnowsTheRakedWallExtruderV3()
+    public void KnowsTheRakedWallExtruderV3ByName()
     {
-        var points = MachineIoMap.For("RakingWallExtruderV3DG", ControlPlatform.NetworkNodes);
+        var points = MachineIoMap.For("RakingWallExtruderV3DG");
 
-        // 75 from the M21737 log, plus the 8 the M21844 log exercised and it did not.
-        Assert.Equal(83, points.Count);
-        Assert.Equal(43, points.Count(p => p.Kind == SignalKind.Input));
-        Assert.Equal(40, points.Count(p => p.Kind == SignalKind.Output));
-        Assert.DoesNotContain(points.GroupBy(p => (p.Kind, p.Address)), g => g.Count() > 1);
+        Assert.Equal(48, points.Count);
+        Assert.Equal(35, points.Count(p => p.IsPaired));
+        Assert.Equal(13, points.Count(p => !p.IsPaired));
+        Assert.DoesNotContain(points.GroupBy(p => (p.Kind, MachineIoMap.Flatten(p.Name))), g => g.Count() > 1);
     }
 
     /// <summary>
-    /// The sides that are set were measured. The rest are Unknown and must stay that way -
-    /// an Unknown side is the map saying it does not know, not an oversight to be filled in.
+    /// The numbering is not the identity. Support: "the actual number of the IO is less important
+    /// than the name of the IO" - some machines run a point on node 5 and some on node 6.
+    /// </summary>
+    [Fact]
+    public void TheMapIsNotKeyedOnTheNumbering()
+    {
+        var studPin = MachineIoMap.Find("RakingWallExtruderV3DG", SignalKind.Output, "IO-StudPinUp2");
+
+        Assert.NotNull(studPin);
+        Assert.Equal(2, studPin!.Instances);
+        Assert.Equal(new[] { "0.14", "1.9" }, studPin.PointsSeen);
+    }
+
+    /// <summary>One machine writes "E Stop" and another "Estop". Not two things.</summary>
+    [Fact]
+    public void NamesMatchAcrossSpacingAndCase()
+    {
+        Assert.True(MachineIoMap.SameName("E Stop", "Estop"));
+        Assert.True(MachineIoMap.SameName("EStop", "e stop"));
+        Assert.False(MachineIoMap.SameName("PlateSupportUp", "PlateSupportDown"));
+    }
+
+    /// <summary>
+    /// Sides were measured, not guessed, and only fifteen points carry one. Unknown means
+    /// exactly that.
     /// </summary>
     [Fact]
     public void OnlyCarriesASideWhereOneWasMeasured()
     {
-        var points = MachineIoMap.For("RakingWallExtruderV3DG", ControlPlatform.NetworkNodes);
+        var plateClamp = MachineIoMap.Find("RakingWallExtruderV3DG", SignalKind.Output, "IO-PlateClamp");
+        var topStud = MachineIoMap.Find("RakingWallExtruderV3DG", SignalKind.Output, "IO-TopStudClamp");
 
-        Assert.Equal(15, points.Count(p => p.Side != MachineSide.Unknown));
-
-        // Settled 25 times out of 25 by the machine's own "Fixed Product: False" messages.
-        Assert.Equal(MachineSide.FixedSide,
-            MachineIoMap.Find("RakingWallExtruderV3DG", ControlPlatform.NetworkNodes, SignalKind.Input, "PlatePresentSwitch")
-                .Single(p => p.Address == "192.168.250.1-4.2").Side);
-        Assert.Equal(MachineSide.FloatingSide,
-            MachineIoMap.Find("RakingWallExtruderV3DG", ControlPlatform.NetworkNodes, SignalKind.Input, "PlatePresentSwitch")
-                .Single(p => p.Address == "192.168.250.1-4.4").Side);
+        Assert.Equal(MachineSide.FixedSide, plateClamp!.SideAtPoint("4.4"));
+        Assert.Equal(MachineSide.FloatingSide, plateClamp.SideAtPoint("4.5"));
+        Assert.Equal(MachineSide.Unknown, topStud!.SideAtPoint("4.14"));
     }
 
     /// <summary>
-    /// Module 4 is not "lower bit is the fixed side". The gripper, plate clamp and upper gripper
-    /// pairs run that way and the horizontal stud clamp runs the other way, so a side read off a
-    /// neighbouring pair is a guess. Both of these came from maint_data.json, separately.
+    /// Module 4 is not "lower bit is the fixed side". Three pairs run that way and the
+    /// horizontal stud clamp runs the other, so a side read off a neighbour is a guess.
     /// </summary>
     [Fact]
     public void TheSidesDoNotFollowABitOrder()
     {
-        MachineSide Side(string address) =>
-            MachineIoMap.For("RakingWallExtruderV3DG", ControlPlatform.NetworkNodes)
-                .Single(p => p.Kind == SignalKind.Output && p.Address == address).Side;
+        var clamp = MachineIoMap.Find("RakingWallExtruderV3DG", SignalKind.Output, "IO-PlateClamp");
+        var horiz = MachineIoMap.Find("RakingWallExtruderV3DG", SignalKind.Output, "IO-HorizStudClamp");
 
-        Assert.Equal(MachineSide.FixedSide, Side("192.168.250.1-4.4"));    // PlateClamp, low bit
-        Assert.Equal(MachineSide.FloatingSide, Side("192.168.250.1-4.5"));
-        Assert.Equal(MachineSide.FloatingSide, Side("192.168.250.1-4.12")); // HorizStudClamp, reversed
-        Assert.Equal(MachineSide.FixedSide, Side("192.168.250.1-4.13"));
+        Assert.Equal(MachineSide.FixedSide, clamp!.SideAtPoint("4.4"));
+        Assert.Equal(MachineSide.FloatingSide, horiz!.SideAtPoint("4.12"));
+        Assert.Equal(MachineSide.FixedSide, horiz.SideAtPoint("4.13"));
     }
 
     [Fact]
     public void NamesAPointTheWayATechnicianWouldSayIt()
     {
-        var fixedClamp = MachineIoMap.For("RakingWallExtruderV3DG", ControlPlatform.NetworkNodes)
-            .Single(p => p.Kind == SignalKind.Output && p.Address == "192.168.250.1-4.4");
-        var unsided = MachineIoMap.For("RakingWallExtruderV3DG", ControlPlatform.NetworkNodes)
-            .Single(p => p.Kind == SignalKind.Output && p.Address == "192.168.250.1-4.14");
+        var clamp = MachineIoMap.Find("RakingWallExtruderV3DG", SignalKind.Output, "IO-PlateClamp");
 
-        Assert.Equal("IO-PlateClamp (fixed side, 192.168.250.1-4.4)", fixedClamp.Describe());
-        Assert.Equal("IO-TopStudClamp (192.168.250.1-4.14)", unsided.Describe());
-    }
-
-    [Fact]
-    public void KnowsBothPlateSupportDownInputs()
-    {
-        // The whole point. The short M21737 log only ever showed 1.1, and the second one at 2.7
-        // never changed - which is what a plate support that never came down looks like.
-        var found = MachineIoMap.Find("RakingWallExtruderV3DG", ControlPlatform.NetworkNodes, SignalKind.Input, "PlateSupportDown");
-
-        Assert.Equal(2, found.Count);
-        Assert.Equal(new[] { "192.168.250.1-1.1", "192.168.250.1-2.7" },
-            found.Select(p => p.Address).OrderBy(a => a));
-        Assert.All(found, p => Assert.True(p.IsPaired));
-    }
-
-    [Fact]
-    public void ThePairingOffsetIsNotOneNumber()
-    {
-        // Why guessing an address from the log's own pairs was wrong: modules 0 and 1 pair two
-        // bits apart, module 1 pairs eleven apart internally, module 4 pairs adjacent.
-        string Partner(SignalKind kind, string name, string address) =>
-            MachineIoMap.Find("RakingWallExtruderV3DG", ControlPlatform.NetworkNodes, kind, name)
-                .Single(p => p.Address == address).PartnerAddress;
-
-        Assert.Equal("192.168.250.1-1.8", Partner(SignalKind.Input, "PlateClampUp", "192.168.250.1-0.10"));
-        Assert.Equal("192.168.250.1-2.7", Partner(SignalKind.Input, "PlateSupportDown", "192.168.250.1-1.1"));
-        Assert.Equal("192.168.250.1-4.15", Partner(SignalKind.Output, "IO-TopStudClamp", "192.168.250.1-4.14"));
+        Assert.Equal("IO-PlateClamp (fixed side) at 4.4", clamp!.Describe("4.4"));
+        Assert.Equal("IO-PlateClamp", clamp.Describe());
     }
 
     [Fact]
     public void AModelWeHaveNeverMappedGetsNothingRatherThanAGuess()
     {
-        Assert.Empty(MachineIoMap.For("SprintM600", ControlPlatform.NetworkNodes));
-        Assert.Empty(MachineIoMap.For(null, ControlPlatform.NetworkNodes));
-        Assert.Empty(MachineIoMap.Find(
-            "SprintM600", ControlPlatform.NetworkNodes, SignalKind.Input, "PlateSupportDown"));
+        Assert.Empty(MachineIoMap.For("SprintM600"));
+        Assert.Empty(MachineIoMap.For(null));
+        Assert.Null(MachineIoMap.Find("SprintM600", SignalKind.Input, "PlateSupportDown"));
     }
 
     /// <summary>
-    /// Every Spida model ships on two control systems and the addresses differ between them, so
-    /// the V3 map - read off two network-addressed machines - must not be handed out for a V3 on
-    /// the other one. The right name against the wrong address sends a technician to the wrong
-    /// terminal, which is worse than saying nothing because it looks like an answer.
+    /// The map knows a plate support down sensor is fitted twice. It does not claim to know what
+    /// this machine numbers the second one - that was the M21737 mistake.
     /// </summary>
     [Fact]
-    public void TheMapIsNotHandedOutAcrossControlPlatforms()
+    public void KnowsAPointIsFittedTwiceWithoutClaimingItsNumberHere()
     {
-        Assert.NotEmpty(MachineIoMap.For("RakingWallExtruderV3DG", ControlPlatform.NetworkNodes));
-        Assert.Empty(MachineIoMap.For("RakingWallExtruderV3DG", ControlPlatform.SerialPort));
-        Assert.Empty(MachineIoMap.For("RakingWallExtruderV3DG", ControlPlatform.Unknown));
+        var found = MachineIoMap.Find("RakingWallExtruderV3DG", SignalKind.Input, "PlateSupportDown");
 
-        Assert.Equal(
-            new[] { ControlPlatform.NetworkNodes },
-            MachineIoMap.PlatformsMapped("RakingWallExtruderV3DG"));
-    }
-
-    /// <summary>Every address in a map must belong to the platform it is filed under.</summary>
-    [Fact]
-    public void EveryMappedAddressMatchesItsPlatform()
-    {
-        foreach (var point in MachineIoMap.For("RakingWallExtruderV3DG", ControlPlatform.NetworkNodes))
-        {
-            Assert.Equal(ControlPlatform.NetworkNodes, ControlPlatformCheck.OfAddress(point.Address));
-        }
-    }
-
-    [Fact]
-    public void TheMapAnswersTheMissingPartnerRatherThanTheOffsetGuess()
-    {
-        // Same short log as the case, now read against the model's real map. Before this the
-        // derived offset said 192.168.250.1-0.3, which is not used on this machine at all.
-        var findings = WaitingOnCheck.Check(MachineLogFile.Parse(new[]
-        {
-            "07:47:15.190,  InputChange, TrolleyBottomClampOpen,  Input (192.168.250.1-1.4) Changed to 1",
-            "07:47:15.190,  InputChange, TrolleyBottomClampOpen,  Input (192.168.250.1-0.6) Changed to 1",
-            "07:48:07.903,  InputChange, PlateClampUp,  Input (192.168.250.1-1.8) Changed to 1",
-            "07:48:07.903,  InputChange, PlateClampUp,  Input (192.168.250.1-0.10) Changed to 1",
-            "07:49:29.628,  InputChange, PlateSupportDown,  Input (192.168.250.1-1.1) Changed to 1",
-            "07:58:26.902,  Other, Extruder,  Waiting for Both Panel Height Servos in position and PlateSupports Down'"
-        }), "RakingWallExtruderV3DG", ControlPlatform.NetworkNodes);
-
-        var signal = Assert.Single(findings.Named);
-
-        Assert.True(signal.PartnerMissing);
-        Assert.True(signal.PartnerFromTheMap);
-        Assert.Equal("192.168.250.1-2.7", signal.MissingPartnerAddress);
-    }
-
-    /// <summary>
-    /// Without knowing the control system there is no map to answer from, because the same model
-    /// on the other one has different addresses. It falls back to the offset guess and says so
-    /// rather than quoting a map address that may be for the wrong machine.
-    /// </summary>
-    [Fact]
-    public void WithoutAPlatformItWillNotQuoteTheMap()
-    {
-        var findings = WaitingOnCheck.Check(MachineLogFile.Parse(new[]
-        {
-            "07:47:15.190,  InputChange, TrolleyBottomClampOpen,  Input (192.168.250.1-1.4) Changed to 1",
-            "07:47:15.190,  InputChange, TrolleyBottomClampOpen,  Input (192.168.250.1-0.6) Changed to 1",
-            "07:48:07.903,  InputChange, PlateClampUp,  Input (192.168.250.1-1.8) Changed to 1",
-            "07:48:07.903,  InputChange, PlateClampUp,  Input (192.168.250.1-0.10) Changed to 1",
-            "07:49:29.628,  InputChange, PlateSupportDown,  Input (192.168.250.1-1.1) Changed to 1",
-            "07:58:26.902,  Other, Extruder,  Waiting for Both Panel Height Servos in position and PlateSupports Down'"
-        }), "RakingWallExtruderV3DG");
-
-        var signal = Assert.Single(findings.Named);
-
-        Assert.False(signal.PartnerFromTheMap);
+        Assert.NotNull(found);
+        Assert.Equal(2, found!.Instances);
+        Assert.True(found.IsPaired);
     }
 }

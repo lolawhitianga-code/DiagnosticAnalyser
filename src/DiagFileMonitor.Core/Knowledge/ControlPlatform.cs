@@ -4,125 +4,129 @@ using DiagFileMonitor.Core.SpidaLogs;
 namespace DiagFileMonitor.Core.Knowledge;
 
 /// <summary>
-/// Which control system a machine is built on. Every Spida model ships in two versions and
-/// <b>the node addresses differ between them</b>, so an I/O list from one is wrong for the other.
+/// Which control system a machine is built on. Every Spida model ships in both, and they number
+/// their I/O differently - so a point is found by <b>name</b>, and whatever number this machine
+/// happens to use is read off its own log.
 /// </summary>
 public enum ControlPlatform
 {
-    /// <summary>Not enough in the log to tell. Nothing address-specific may be applied.</summary>
+    /// <summary>Not enough in the log to tell.</summary>
     Unknown,
 
     /// <summary>
-    /// Addresses look like <c>192.168.250.1-4.2</c> and axes report as <c>Node0 Status</c> through
-    /// <c>Node5 Status</c>. Seen on M20716, M21737 and M21844.
+    /// ControlLogix. Addresses carry a transport prefix - <c>COM7-4.5</c> on the older serial
+    /// protocol, <c>TCP192.168.50.2-3.17</c> since the move to TCP - and axes report under their
+    /// own names, e.g. <c>Axis-InfeedFollower</c>. Seen on AOR1694 (COM) and M17311 (TCP).
     /// </summary>
-    NetworkNodes,
+    Clx,
 
     /// <summary>
-    /// Addresses look like <c>COM7-4.5</c> and axes report under their own names, e.g.
-    /// <c>FloatingSidePuller Status</c>. Seen on AOR1694.
+    /// Omron. Addresses are a bare IP and a module.bit - <c>192.168.250.1-4.2</c> - and axes
+    /// report as numbered EtherCAT nodes, <c>Node0 Status</c> through <c>Node5 Status</c>, as
+    /// well as by name. Seen on M20716, M21737, M21844 and M20771.
     /// </summary>
-    SerialPort,
-
-    /// <summary>
-    /// Addresses carry a TCP prefix - <c>TCP192.168.50.2-3.17</c> - and axes report under their
-    /// own names, e.g. <c>Axis-InfeedFollower</c>. Confirmed as the CLX build: support named
-    /// M17311, a Tornado M500, as CLX and this is the shape its log writes.
-    /// </summary>
-    TcpAddressed
+    Omron
 }
 
-public record PlatformFinding(ControlPlatform Platform, string Evidence, int AddressesSeen)
+/// <summary>How the addresses are carried. A CLX detail; it does not change the machine.</summary>
+public enum AddressTransport
+{
+    Unknown,
+    ComPort,
+    Tcp,
+    Network
+}
+
+public record PlatformFinding(
+    ControlPlatform Platform, AddressTransport Transport, string Evidence, int AddressesSeen)
 {
     public bool Known => Platform != ControlPlatform.Unknown;
 
     public string Describe() => Platform switch
     {
-        ControlPlatform.NetworkNodes => "network-addressed, axes report as numbered nodes",
-        ControlPlatform.SerialPort => "serial-port addressed, axes report under their own names",
-        ControlPlatform.TcpAddressed => "TCP-addressed (CLX), axes report under their own names",
+        ControlPlatform.Clx when Transport == AddressTransport.ComPort => "CLX, older COM-port protocol",
+        ControlPlatform.Clx => "CLX, TCP protocol",
+        ControlPlatform.Omron => "Omron",
         _ => "not established from this log"
     };
 }
 
 /// <summary>
-/// Works out which control system a log came from, so an I/O map from the wrong one is never
-/// applied.
+/// Works out which control system a log came from.
 /// <para>
-/// This matters more than it looks. The I/O map is addresses, and handing a technician the right
-/// name against the wrong address sends them to the wrong terminal. The map is therefore keyed
-/// on the platform as well as the model, and a log whose platform cannot be established gets no
-/// map at all rather than a plausible-looking wrong one.
-/// </para>
-/// <para>
-/// The two are told apart by two independent signs that have always agreed so far: the shape of
-/// the addresses, and whether axis status lines carry a node number or an axis name.
+/// This is worth knowing for context and for reading the axis lines, but it is deliberately
+/// <b>not</b> used to gate the I/O map any more. Machines of one model do not agree on their I/O
+/// numbering even within one platform - some Wall Extruder DGs run their points on node 5 and
+/// some on node 6 - so the map is a list of <b>names</b> and the numbers come from each log.
 /// </para>
 /// </summary>
 public static class ControlPlatformCheck
 {
+    private static readonly Regex TcpAddress = new(
+        @"\(TCP\d{1,3}(\.\d{1,3}){3}-\d+\.\d+\)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private static readonly Regex NetworkAddress = new(
         @"\(\d{1,3}(\.\d{1,3}){3}-\d+\.\d+\)", RegexOptions.Compiled);
 
-    private static readonly Regex SerialAddress = new(
+    private static readonly Regex ComAddress = new(
         @"\(COM\d+-\d+\.\d+\)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
-    private static readonly Regex TcpAddress = new(
-        @"\(TCP\d{1,3}(\.\d{1,3}){3}-\d+\.\d+\)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex NodeStatus = new(
         @"^Node\d+ Status$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public static PlatformFinding Detect(IReadOnlyList<MachineLogEntry> entries)
     {
-        var network = 0;
-        var serial = 0;
         var tcp = 0;
+        var network = 0;
+        var com = 0;
         var nodes = 0;
 
         foreach (var entry in entries)
         {
-            // TCP is checked first: its address contains a bare IP and would otherwise match.
+            // TCP first: its address contains a bare IP and would otherwise match that pattern.
             if (TcpAddress.IsMatch(entry.Description)) tcp++;
             else if (NetworkAddress.IsMatch(entry.Description)) network++;
-            else if (SerialAddress.IsMatch(entry.Description)) serial++;
+            else if (ComAddress.IsMatch(entry.Description)) com++;
 
             if (entry.Category == MachineLogCategory.MotionEvent && NodeStatus.IsMatch(entry.Tag.Trim()))
                 nodes++;
         }
 
-        if (tcp > network && tcp > serial && tcp > 0)
-            return new PlatformFinding(
-                ControlPlatform.TcpAddressed, $"{tcp} TCP-prefixed addresses", tcp);
+        if (tcp >= network && tcp >= com && tcp > 0)
+            return new PlatformFinding(ControlPlatform.Clx, AddressTransport.Tcp,
+                $"{tcp} TCP-prefixed addresses", tcp);
 
-        if (network > serial && network > 0)
-            return new PlatformFinding(
-                ControlPlatform.NetworkNodes,
+        if (com >= network && com > 0)
+            return new PlatformFinding(ControlPlatform.Clx, AddressTransport.ComPort,
+                $"{com} COM-port addresses", com);
+
+        if (network > 0)
+            return new PlatformFinding(ControlPlatform.Omron, AddressTransport.Network,
                 nodes > 0
-                    ? $"{network} network addresses and {nodes} numbered node status lines"
-                    : $"{network} network addresses",
+                    ? $"{network} bare-IP addresses and {nodes} numbered node status lines"
+                    : $"{network} bare-IP addresses",
                 network);
 
-        if (serial > 0)
-            return new PlatformFinding(
-                ControlPlatform.SerialPort,
-                nodes == 0
-                    ? $"{serial} COM-port addresses and no numbered node status lines"
-                    : $"{serial} COM-port addresses",
-                serial);
-
-        return new PlatformFinding(ControlPlatform.Unknown, "no I/O addresses in this log", 0);
+        return new PlatformFinding(ControlPlatform.Unknown, AddressTransport.Unknown,
+            "no I/O addresses in this log", 0);
     }
 
-    /// <summary>The platform an address belongs to, for checking a map against a log.</summary>
+    /// <summary>The platform an address shape belongs to.</summary>
     public static ControlPlatform OfAddress(string address)
     {
-        if (address.StartsWith("COM", StringComparison.OrdinalIgnoreCase)) return ControlPlatform.SerialPort;
-        if (address.StartsWith("TCP", StringComparison.OrdinalIgnoreCase)) return ControlPlatform.TcpAddressed;
+        if (address.StartsWith("COM", StringComparison.OrdinalIgnoreCase)) return ControlPlatform.Clx;
+        if (address.StartsWith("TCP", StringComparison.OrdinalIgnoreCase)) return ControlPlatform.Clx;
 
         var dash = address.IndexOf('-');
         var head = dash > 0 ? address[..dash] : address;
 
-        return head.Count(c => c == '.') == 3 ? ControlPlatform.NetworkNodes : ControlPlatform.Unknown;
+        return head.Count(c => c == '.') == 3 ? ControlPlatform.Omron : ControlPlatform.Unknown;
+    }
+
+    /// <summary>The module and bit, with whatever transport prefix stripped off.</summary>
+    public static string Point(string address)
+    {
+        var dash = address.LastIndexOf('-');
+        return dash >= 0 && dash < address.Length - 1 ? address[(dash + 1)..] : address;
     }
 }

@@ -329,53 +329,79 @@ public static class SpidaReportFormatter
     }
 
     /// <summary>
-    /// This machine's I/O held against the map for its model. The map is addresses, and addresses
-    /// are what a technician walks up to, so a name sitting somewhere the map does not expect is
-    /// worth more than anything else in this section.
+    /// What this machine has, by name, with whatever numbers this machine uses.
+    /// <para>
+    /// The name is the identity and the number is not. Machines of one model are not numbered
+    /// alike - some Wall Extruder DGs run a point on node 5 and some on node 6 - so this reads
+    /// the numbers off the log rather than quoting another machine's.
+    /// </para>
     /// </summary>
     private static void AppendIoMapCheck(StringBuilder text, IoMapFindings findings)
     {
-        if (!findings.Checked && findings.SharedAddresses.Count == 0) return;
+        if (!findings.Any && findings.SharedAddresses.Count == 0) return;
 
         text.AppendLine();
-        text.AppendLine("THIS MACHINE AGAINST THE MODEL'S I/O MAP");
+        text.AppendLine("THE I/O ON THIS MACHINE");
 
         if (findings.Checked)
         {
-            text.AppendLine($"  {findings.SeenHere} point(s) moved in this log; {findings.Confirmed} of them "
-                            + $"sit where the map for this model says, out of {findings.MapPoints} mapped.");
+            text.AppendLine($"  {ReportText.Wrap($"This model is known to have {findings.NamesOnModel} named points. "
+                + $"{findings.Known.Count} of them moved in this log. The numbers below are this machine's own - "
+                + "another machine of the same model will number them differently and that is normal.", 2)}");
+            text.AppendLine();
+
+            foreach (var kind in new[] { SignalKind.Output, SignalKind.Input })
+            {
+                var rows = findings.Known.Where(r => r.Kind == kind).OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase).ToList();
+                if (rows.Count == 0) continue;
+
+                text.AppendLine($"  {(kind == SignalKind.Output ? "OUTPUTS" : "INPUTS")}");
+                foreach (var row in rows)
+                {
+                    var short_ = row.SomeNeverMoved
+                        ? $"   << {row.InstancesOnModel} fitted, only {row.PointsHere.Count} moved"
+                        : string.Empty;
+                    text.AppendLine($"      {row.Name,-28} {row.Numbers}{short_}");
+                }
+                text.AppendLine();
+            }
         }
 
-        foreach (var clash in findings.Disagreements)
+        var never = findings.NeverMoved.Where(r => r.PointsHere.Count == 0).ToList();
+        if (never.Count > 0)
         {
+            text.AppendLine($"  {ReportText.Wrap($"{never.Count} point(s) this model has never moved in this log. A log "
+                + "records changes, so a sensor that never came on and one that is not fitted look exactly the same "
+                + "here - worth a look only if the complaint points at one of them:", 2)}");
+            foreach (var row in never.Take(15))
+            {
+                text.AppendLine($"      {row.Kind,-7} {row.Name}");
+            }
+            if (never.Count > 15) text.AppendLine($"      ... and {never.Count - 15} more");
             text.AppendLine();
-            text.AppendLine($"  >>> {ReportText.Wrap(clash.Describe() + ". Go by this log, not the map - "
-                + "machines of one model are not wired identically, and the map is the other machines.", 6)}");
         }
 
         if (findings.SharedAddresses.Count > 0)
         {
-            text.AppendLine();
-            text.AppendLine("  The machine calls one address by more than one name:");
+            text.AppendLine("  One number, more than one name:");
             foreach (var shared in findings.SharedAddresses)
             {
                 text.AppendLine($"      {shared.Address}  =  {string.Join("  /  ", shared.Names)}");
             }
-            text.AppendLine($"  {ReportText.Wrap("That is one physical point with a label per job, not two points. "
-                + "Asking what an address is has more than one right answer here.", 2)}");
+            text.AppendLine($"  {ReportText.Wrap("That is one physical point with a label per job, not two points.", 2)}");
+            text.AppendLine();
         }
 
-        if (findings.NotInTheMap.Count > 0 && findings.Checked)
+        if (findings.NotOnTheModel.Count > 0 && findings.Checked)
         {
-            text.AppendLine();
-            text.AppendLine($"  {ReportText.Wrap($"{findings.NotInTheMap.Count} point(s) here are not in the model's "
-                + "map at all, which usually means an option fitted to this machine and not to the ones mapped:", 2)}");
-            foreach (var extra in findings.NotInTheMap.Take(12))
+            text.AppendLine($"  {ReportText.Wrap($"{findings.NotOnTheModel.Count} point(s) here are not on the model's "
+                + "list at all - usually an option fitted to this machine and not to the ones mapped:", 2)}");
+            foreach (var extra in findings.NotOnTheModel.Take(12))
             {
-                text.AppendLine($"      {extra.Address,-22} {extra.Name}");
+                text.AppendLine($"      {extra.Name,-28} {ControlPlatformCheck.Point(extra.Address)}");
             }
-            if (findings.NotInTheMap.Count > 12)
-                text.AppendLine($"      ... and {findings.NotInTheMap.Count - 12} more");
+            if (findings.NotOnTheModel.Count > 12)
+                text.AppendLine($"      ... and {findings.NotOnTheModel.Count - 12} more");
         }
     }
 
@@ -704,19 +730,19 @@ public static class SpidaReportFormatter
 
         foreach (var orphan in waiting.Named.Where(s => s.PartnerMissing))
         {
-            text.AppendLine($"  >>> {orphan.Id.Name} is logged at one address only, {orphan.Id.Address}.");
+            text.AppendLine($"  >>> {orphan.Id.Name} moved at one number only in this log, "
+                            + $"{ControlPlatformCheck.Point(orphan.Id.Address)}.");
 
-            // Where the second address comes from changes how much it should be trusted, so say.
             text.AppendLine(orphan.PartnerFromTheMap
-                ? $"      This model is known to have a second one at {orphan.MissingPartnerAddress}, and that"
-                : $"      This machine pairs its inputs one per side, so its partner would be"
-                  + $" {orphan.MissingPartnerAddress} - and that");
+                ? $"      This model is fitted with {orphan.InstancesOnThisModel} of them, one per side."
+                : "      This machine fits these one per side.");
 
-            text.AppendLine("      address never appears anywhere in this log.");
+            text.AppendLine("      The other one never appears anywhere in this log.");
             text.AppendLine("      A log records changes, so an input that never came on leaves no trace at all.");
             text.AppendLine("      That is what a sensor stuck off looks like from here, and it fits a machine");
             text.AppendLine("      waiting for something it says it has not got.");
             text.AppendLine("      Check that sensor, its cable and its connector on the other side of the machine.");
+            text.AppendLine("      Read its number off this machine - the sides are not numbered alike between machines.");
             text.AppendLine();
         }
 
@@ -1238,8 +1264,8 @@ public static class SpidaReportFormatter
             var orphan = waiting.Named.FirstOrDefault(sig => sig.PartnerMissing);
 
             var what = orphan is not null
-                ? $"{orphan.Id.Name} is logged at one address only and its partner "
-                  + $"{orphan.MissingPartnerAddress} never appears - check that sensor on the other side"
+                ? $"{orphan.Id.Name} moved at one number only and the other side never appears "
+                  + "- check that sensor on the other side"
                 : waiting.NotOn.Count > 0
                     ? $"{string.Join(", ", waiting.NotOn.Select(sig => sig.Id.Name))} was off"
                     : $"{string.Join(", ", waiting.NotReady.Select(a => a.Name))} was not in position";

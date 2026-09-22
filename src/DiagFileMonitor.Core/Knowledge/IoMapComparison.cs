@@ -2,121 +2,144 @@ using DiagFileMonitor.Core.SpidaLogs;
 
 namespace DiagFileMonitor.Core.Knowledge;
 
-/// <summary>A signal name whose address in this log is not the address the map expects.</summary>
-public record AddressDisagreement(
+/// <summary>One named point on the model, and what this machine numbers it.</summary>
+public record PointHere(
     SignalKind Kind,
     string Name,
-    IReadOnlyList<string> InThisLog,
-    IReadOnlyList<string> InTheMap)
+    IReadOnlyList<string> PointsHere,
+    int InstancesOnModel,
+    IReadOnlyList<MachineSide> SidesHere)
 {
-    public string Describe() =>
-        $"{Name} is at {string.Join(" and ", InThisLog)} here, "
-        + $"but the map has {string.Join(" and ", InTheMap)}";
+    /// <summary>The model has more of these than moved in this log.</summary>
+    public bool SomeNeverMoved => InstancesOnModel > PointsHere.Count;
+
+    /// <summary>This machine's numbers, each with its side where that was measured.</summary>
+    public string Numbers
+    {
+        get
+        {
+            if (PointsHere.Count == 0) return "-";
+
+            return string.Join(", ", PointsHere.Select((point, i) =>
+            {
+                var side = i < SidesHere.Count ? SidesHere[i] : MachineSide.Unknown;
+                return side switch
+                {
+                    MachineSide.FixedSide => $"{point} fixed",
+                    MachineSide.FloatingSide => $"{point} floating",
+                    MachineSide.Shared => $"{point} shared",
+                    _ => point
+                };
+            }));
+        }
+    }
 }
 
 /// <summary>One address the machine calls by more than one name.</summary>
 public record SharedAddress(SignalKind Kind, string Address, IReadOnlyList<string> Names);
 
 public record IoMapFindings(
-    int MapPoints,
-    int SeenHere,
-    int Confirmed,
-    IReadOnlyList<AddressDisagreement> Disagreements,
-    IReadOnlyList<SignalId> NotInTheMap,
-    IReadOnlyList<SharedAddress> SharedAddresses)
+    IReadOnlyList<PointHere> Known,
+    IReadOnlyList<PointHere> NeverMoved,
+    IReadOnlyList<SignalId> NotOnTheModel,
+    IReadOnlyList<SharedAddress> SharedAddresses,
+    int NamesOnModel)
 {
-    public bool Checked => MapPoints > 0;
+    public bool Checked => NamesOnModel > 0;
 
-    /// <summary>The ones that would send somebody to the wrong terminal.</summary>
-    public bool AnythingWorrying => Disagreements.Count > 0;
+    public bool Any => Known.Count > 0 || NeverMoved.Count > 0 || NotOnTheModel.Count > 0;
 }
 
 /// <summary>
-/// Holds one machine's I/O against the map for its model, and reports where they differ.
+/// Lists what this machine has, by name, with whatever numbers this machine happens to use.
 /// <para>
-/// Three machines of the same model on the same control platform share 74 addresses and agree on
-/// the name of every one - but not all of them. On M20771 <c>UpperGunUpperIsLow</c> sits at
-/// <c>0.18</c> where M21737 and M21844 both have <c>0.19</c>. One bit, one machine, and a map
-/// quoted as fact would have sent a technician to the wrong terminal.
+/// This used to compare addresses and treat a difference as a warning. That was the wrong way
+/// round. Support's words: <i>"the actual number of the IO is less important than the name of
+/// the IO"</i> - some Wall Extruder DGs run a point on node 5 and some on node 6, and on three
+/// Raked Wall Extruder V3s <c>UpperGunUpperIsLow</c> sits at 0.19 on two and 0.18 on the third.
+/// None of that is a fault; it is just how that machine is wired.
 /// </para>
 /// <para>
-/// So the map is checked against every log rather than trusted over it. A name at a different
-/// address is the finding that matters; points missing from a short log are ordinary, and points
-/// the map has never seen are usually an option fitted to that machine and not to the others -
-/// M20771 carries a whole infeed, lifter and unloader subsystem on modules 3 and 5 that neither
-/// of the other two has.
+/// So the name is the identity and the number is read off the log in front of you. What is still
+/// worth saying is a name the model has that <b>never moved here</b> - because a log records
+/// changes, so a sensor that never came on and a sensor that is not fitted look identical, and
+/// that is exactly the gap that cost us the M21737 case.
 /// </para>
 /// </summary>
 public static class IoMapComparison
 {
-    public static IoMapFindings Check(IoTimeline timeline, string? model, ControlPlatform platform)
+    public static IoMapFindings Check(IoTimeline timeline, string? model)
     {
-        var map = MachineIoMap.For(model, platform);
+        var model_ = MachineIoMap.For(model);
         var seen = timeline.Signals;
+        var shared = SharedIn(seen);
 
-        if (map.Count == 0)
-            return new IoMapFindings(0, seen.Count, 0,
-                Array.Empty<AddressDisagreement>(), Array.Empty<SignalId>(), SharedIn(seen));
+        if (model_.Count == 0)
+            return new IoMapFindings(
+                Array.Empty<PointHere>(), Array.Empty<PointHere>(), Array.Empty<SignalId>(), shared, 0);
 
-        var mapByName = map
-            .GroupBy(p => (p.Kind, p.Name), NameComparer)
-            .ToDictionary(g => g.Key, g => g.Select(p => p.Address).OrderBy(a => a).ToList(), NameComparer);
+        var here = seen
+            .GroupBy(s => (s.Kind, Name: MachineIoMap.Flatten(s.Name)))
+            .ToDictionary(g => g.Key, g => g.Select(s => ControlPlatformCheck.Point(s.Address))
+                                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                                            .OrderBy(Order)
+                                            .ToList());
 
-        var mapAddresses = map.Select(p => (p.Kind, p.Address)).ToHashSet();
+        var known = new List<PointHere>();
+        var missing = new List<PointHere>();
 
-        var disagreements = new List<AddressDisagreement>();
-
-        foreach (var group in seen.GroupBy(s => (s.Kind, s.Name), NameComparer))
+        foreach (var point in model_)
         {
-            if (!mapByName.TryGetValue(group.Key, out var expected)) continue;
+            var key = (point.Kind, Name: MachineIoMap.Flatten(point.Name));
+            var numbers = here.GetValueOrDefault(key, new List<string>());
 
-            var here = group.Select(s => s.Address).OrderBy(a => a).ToList();
+            var row = new PointHere(
+                point.Kind, point.Name, numbers, point.Instances,
+                numbers.Select(point.SideAtPoint).ToList());
 
-            // Only a name sitting somewhere the map does not have it at all is worth raising.
-            // A short log showing one half of a pair is ordinary and says nothing is wrong.
-            var unexpected = here.Where(a => !expected.Contains(a, StringComparer.OrdinalIgnoreCase)).ToList();
-            if (unexpected.Count > 0)
-                disagreements.Add(new AddressDisagreement(group.Key.Kind, group.Key.Name, unexpected, expected));
+            if (numbers.Count == 0) missing.Add(row);
+            else
+            {
+                known.Add(row);
+                if (row.SomeNeverMoved) missing.Add(row);
+            }
         }
 
-        var confirmed = seen.Count(s => mapAddresses.Contains((s.Kind, s.Address)));
+        var onModel = model_
+            .Select(p => (p.Kind, Name: MachineIoMap.Flatten(p.Name)))
+            .ToHashSet();
 
-        var unknown = seen
-            .Where(s => !mapAddresses.Contains((s.Kind, s.Address)))
-            .OrderBy(s => s.Address, StringComparer.OrdinalIgnoreCase)
+        var extra = seen
+            .Where(s => !onModel.Contains((s.Kind, MachineIoMap.Flatten(s.Name))))
+            .OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        return new IoMapFindings(map.Count, seen.Count, confirmed, disagreements, unknown, SharedIn(seen));
+        return new IoMapFindings(known, missing, extra, shared, model_.Count);
+    }
+
+    /// <summary>Sorts 2.3 before 2.11 rather than after it.</summary>
+    private static (int, int) Order(string point)
+    {
+        var parts = point.Split('.');
+        return parts.Length == 2
+               && int.TryParse(parts[0], out var module)
+               && int.TryParse(parts[1], out var bit)
+            ? (module, bit)
+            : (int.MaxValue, 0);
     }
 
     /// <summary>
     /// An address the log calls by two names. On M20771 output 5.0 is IO-Bay2Stops while the
     /// infeed runs and IO-UnloaderUp while the unloader does - one physical output, two labels
-    /// depending on what is driving it, never both at once. Worth saying, because "what is 5.0"
-    /// then has two right answers.
+    /// depending on what is driving it, never both at once.
     /// </summary>
     private static IReadOnlyList<SharedAddress> SharedIn(IReadOnlyList<SignalId> seen) => seen
         .GroupBy(s => (s.Kind, s.Address))
-        .Where(g => g.Select(s => s.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
+        .Where(g => g.Select(s => MachineIoMap.Flatten(s.Name)).Distinct().Count() > 1)
         .Select(g => new SharedAddress(
             g.Key.Kind,
             g.Key.Address,
             g.Select(s => s.Name).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(n => n).ToList()))
         .OrderBy(s => s.Address, StringComparer.OrdinalIgnoreCase)
         .ToList();
-
-    private static readonly NameKeyComparer NameComparer = new();
-
-    /// <summary>Names differ in spacing and case between machines - "E Stop" and "Estop".</summary>
-    private sealed class NameKeyComparer : IEqualityComparer<(SignalKind Kind, string Name)>
-    {
-        public bool Equals((SignalKind Kind, string Name) a, (SignalKind Kind, string Name) b) =>
-            a.Kind == b.Kind && Flatten(a.Name) == Flatten(b.Name);
-
-        public int GetHashCode((SignalKind Kind, string Name) key) =>
-            HashCode.Combine(key.Kind, Flatten(key.Name));
-
-        private static string Flatten(string name) =>
-            new(name.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
-    }
 }

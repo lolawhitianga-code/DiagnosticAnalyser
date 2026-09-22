@@ -10,7 +10,7 @@ public record WaitingSignal(
     StateSource Source,
     TimeSpan? Since,
     int AddressesForThisName,
-    string MissingPartnerAddress,
+    int InstancesOnThisModel,
     bool PartnerFromTheMap)
 {
     public string OnOff => On ? "on" : "off";
@@ -20,7 +20,19 @@ public record WaitingSignal(
     /// changes never appears in a change log, so the partner being absent is exactly what a sensor
     /// that never came on looks like.
     /// </summary>
-    public bool PartnerMissing => MissingPartnerAddress.Length > 0;
+    /// <summary>
+    /// The model is fitted with more of these than moved in this log. An input that never changes
+    /// never appears in a change log, so a missing one is exactly what a sensor that never came
+    /// on looks like.
+    /// <para>
+    /// What is deliberately <b>not</b> said is its number. Machines of one model are not numbered
+    /// alike, so a number from the map would be another machine's - which is how the M21737
+    /// answer came out two bits and a module wrong. "There should be two of these and only one
+    /// moved" is the finding; the number is read off this machine.
+    /// </para>
+    /// </summary>
+    public bool PartnerMissing =>
+        InstancesOnThisModel > 0 && AddressesForThisName < InstancesOnThisModel;
 }
 
 /// <summary>An axis the waiting message named, and what it was doing.</summary>
@@ -106,8 +118,7 @@ public static class WaitingOnCheck
         @"[A-Z]+(?![a-z])|[A-Z][a-z]*|[a-z]+|\d+", RegexOptions.Compiled);
 
     public static WaitingOnFindings Check(
-        IReadOnlyList<MachineLogEntry> entries, string? machineModel = null,
-        ControlPlatform platform = ControlPlatform.Unknown)
+        IReadOnlyList<MachineLogEntry> entries, string? machineModel = null)
     {
         if (entries.Count == 0) return new WaitingOnFindings();
 
@@ -134,16 +145,12 @@ public static class WaitingOnCheck
             .ToDictionary(g => g.Key, g => g.Select(s => s.Address).Distinct().ToList(),
                 StringComparer.OrdinalIgnoreCase);
 
-        var pairing = PairingHabit(timeline);
-
         var named = snapshot.Outputs.Concat(snapshot.Inputs)
             .Where(state => Mentions(text, state.Id.Name))
             .Select(state =>
             {
                 var addresses = addressesPerName.GetValueOrDefault(state.Id.Name, new List<string>());
-                var mapped = MachineIoMap.Find(machineModel, platform, state.Id.Kind, state.Id.Name);
-                var fromMap = mapped.Count > 0;
-                var partner = MissingPartner(machineModel, platform, state.Id, addresses, pairing, timeline);
+                var mapped = MachineIoMap.Find(machineModel, state.Id.Kind, state.Id.Name);
 
                 return new WaitingSignal(
                     state.Id,
@@ -151,8 +158,8 @@ public static class WaitingOnCheck
                     state.Source,
                     state.Since,
                     addresses.Count,
-                    partner,
-                    fromMap);
+                    mapped?.Instances ?? 0,
+                    mapped is not null);
             })
             .OrderBy(s => s.On)
             .ThenBy(s => s.Id.Name, StringComparer.OrdinalIgnoreCase)
@@ -182,98 +189,6 @@ public static class WaitingOnCheck
                 .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
                 .ToList()
         };
-    }
-
-    /// <summary>
-    /// The address offset this machine uses between the two halves of a paired signal.
-    /// <para>
-    /// Derived from the machine's own log rather than assumed, because the habit differs: the
-    /// M21737 extruder pairs 1.8 with 0.10, 1.6 with 0.8 and 1.4 with 0.6 - the same bit two
-    /// lower on the module below - while the M22215 saw pairs adjacent bits on one module. Only
-    /// an offset every pair agrees on counts.
-    /// </para>
-    /// </summary>
-    private static (int Module, int Bit)? PairingHabit(IoTimeline timeline)
-    {
-        var offsets = timeline.Signals
-            .Where(s => s.Kind == SignalKind.Input)
-            .GroupBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
-            .Where(g => g.Select(s => s.Address).Distinct().Count() == 2)
-            .Select(g => g.Select(s => Address(s.Address)).Where(a => a is not null)
-                .Select(a => a!.Value).OrderBy(a => a.Module).ThenBy(a => a.Bit).ToList())
-            .Where(pair => pair.Count == 2)
-            .Select(pair => (Module: pair[1].Module - pair[0].Module, Bit: pair[1].Bit - pair[0].Bit))
-            .ToList();
-
-        if (offsets.Count < 2) return null;
-
-        var agreed = offsets.Distinct().ToList();
-        return agreed.Count == 1 ? agreed[0] : null;
-    }
-
-    /// <summary>
-    /// The address of this signal's other half, where the machine has one and it never spoke in
-    /// this log.
-    /// <para>
-    /// The model's I/O map is asked first and believed absolutely, because it was read off a log
-    /// long enough to exercise the whole machine. Only where there is no map does this fall back
-    /// to the offset the log's own pairs agree on - and that fallback is a guess. On the M21737
-    /// case it predicted 192.168.250.1-0.3 for the second plate support from three pairs that
-    /// happened to share an offset. The real address is 192.168.250.1-2.7, and 0.3 is not used
-    /// at all. The pairing offset on these machines is not one number: modules 0 and 1 pair two
-    /// bits apart, module 1 pairs eleven bits apart internally, and module 4 pairs adjacent.
-    /// </para>
-    /// </summary>
-    private static string MissingPartner(
-        string? model, ControlPlatform platform, SignalId id, List<string> addressesHere,
-        (int Module, int Bit)? habit, IoTimeline timeline)
-    {
-        if (addressesHere.Count != 1) return string.Empty;
-
-        var known = MachineIoMap.Find(model, platform, id.Kind, id.Name);
-
-        if (known.Count > 0)
-        {
-            // The map knows this machine. Anything it lists that did not move here is the answer.
-            return known
-                .Select(point => point.Address)
-                .FirstOrDefault(address => !addressesHere.Contains(address, StringComparer.OrdinalIgnoreCase))
-                ?? string.Empty;
-        }
-
-        return PartnerOf(id.Address, habit, timeline);
-    }
-
-    /// <summary>
-    /// Where a partner would be if this machine used one offset throughout. A fallback for a
-    /// model we have never mapped, and a guess - see <see cref="MissingPartner"/>.
-    /// </summary>
-    private static string PartnerOf(string address, (int Module, int Bit)? habit, IoTimeline timeline)
-    {
-        if (habit is not { } offset || Address(address) is not { } here) return string.Empty;
-
-        // Try both directions - this signal could be either half of the pair.
-        foreach (var candidate in new[]
-                 {
-                     (here.Module + offset.Module, here.Bit + offset.Bit),
-                     (here.Module - offset.Module, here.Bit - offset.Bit)
-                 })
-        {
-            if (candidate.Item1 < 0 || candidate.Item2 < 0) continue;
-
-            var prefix = address[..address.LastIndexOf('-')];
-            var guess = $"{prefix}-{candidate.Item1}.{candidate.Item2}";
-
-            // Only worth naming if nothing is using it. An address already in the log is not a
-            // missing partner, it is a different signal.
-            if (timeline.Signals.Any(s => s.Kind == SignalKind.Input
-                                          && s.Address.Equals(guess, StringComparison.OrdinalIgnoreCase)))
-                continue;
-
-            return guess;
-        }
-
-        return string.Empty;
     }
 
     /// <summary>Splits "192.168.250.1-1.8" into module 1, bit 8.</summary>
