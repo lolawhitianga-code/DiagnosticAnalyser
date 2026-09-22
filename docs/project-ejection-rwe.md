@@ -76,10 +76,27 @@ Two things worth noting from the same measurement:
   the same 6000→1200 travel. Speed setting, or a different machine geometry? Open.
 - The pullers go to **6000**, not 6040, on all three machines.
 
-*Inferred, not confirmed:* that `Node0` and `Node1` are the two side pullers. All of Node0-3 start
-moving within a second of the puller command because the ejectors follow 0.2 s later, so the
-nodes cannot be separated on that alone. Node0/1 report OK first and the ejectors travel further,
-which fits, but the PLC would settle it.
+**Confirmed from the machine's own configuration** (`RakingWallExtruderV3DG.xml`, which every
+bundle carries - it is UTF-16, which is why it had read as empty until now):
+
+| Node | Axis |
+|---|---|
+| 0 | FixedSide Trolley - the fixed side puller |
+| 1 | FloatingSide Trolley - the floating side puller |
+| 2 | FixedSide EjectServo |
+| 3 | FloatingSide EjectServo |
+| 4 | TrolleyHeight |
+| 5 | FloatingSide YAxis |
+
+All three machines agree. So Node0/Node1 OK really is the pullers arriving, and Node2/Node3 the
+ejectors - the earlier inference was right, and is now read rather than guessed.
+
+Node numbers are **reused across controllers**: node 4 is TrolleyHeight on the Omron main and the
+fixed side servo guns on a CLX at TCP192.168.50.2. The log's NodeN Status lines come from the
+main.
+
+The config does **not** explain why M20771's pullers take 16.3 s where M21844's take 8.7 s -
+velocity is 1000 and scale about 420.4 on all three. Still open.
 
 ## 3. Staged release is staged by SIDE, not by upper/lower
 
