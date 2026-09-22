@@ -1,3 +1,5 @@
+using DiagFileMonitor.Core.Services;
+
 namespace DiagFileMonitor.Core.Models;
 
 /// <summary>
@@ -90,7 +92,8 @@ public class DiagnosticFileSummary
         TicketNumber = file.TicketNumber,
         IsBaseline = file.IsBaseline,
         ZohoTicketNumber = file.ZohoTicketNumber,
-        ChangeLogPath = PathOf(file, LogFileKind.ChangeLog),
+        // Change.log moved in some SDN versions; read the live copy, not the one left behind.
+        ChangeLogPath = BundleLogs.PathOf(file, LogFileKind.ChangeLog) is { Length: > 0 } changeLog ? changeLog : null,
         MachineLogPath = PathOf(file, LogFileKind.MachineLog),
         ErrorLogPath = PathOf(file, LogFileKind.ErrorLog)
     };

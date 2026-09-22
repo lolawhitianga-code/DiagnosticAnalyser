@@ -55,11 +55,13 @@ public static class BundleLogs
         var candidates = bundle.LogFiles.Where(l => l.Kind == kind).ToList();
         if (candidates.Count == 0) return string.Empty;
 
-        var best = candidates
-            .OrderByDescending(l => InSupportFolder(l.FullPath))
-            .ThenByDescending(l => Depth(l.FullPath))
-            .ThenByDescending(l => l.SizeBytes)
-            .First();
+        var best = kind == LogFileKind.ChangeLog && candidates.Count > 1
+            ? NewestChangeLog(candidates)
+            : candidates
+                .OrderByDescending(l => InSupportFolder(l.FullPath))
+                .ThenByDescending(l => Depth(l.FullPath))
+                .ThenByDescending(l => l.SizeBytes)
+                .First();
 
         if (candidates.Count > 1 && notes is not null)
         {
@@ -88,6 +90,28 @@ public static class BundleLogs
                         && l.FileName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(l => l.SizeBytes)
             .FirstOrDefault()?.FullPath ?? string.Empty;
+    }
+
+    /// <summary>
+    /// Change.log moved in some SDN versions, and the old copy is left behind. M20771 carried
+    /// both: the deeper Logs/Support copy stopped in March, the one at the root ran to that
+    /// morning and held a fixed side puller home position change. Reading the old one says
+    /// "nothing changed" - exactly the wrong answer. Change.log only ever grows, so the copy with
+    /// the newest entry is the live one, wherever it sits. Folder rules only break a tie.
+    /// </summary>
+    private static ExtractedLogFile NewestChangeLog(List<ExtractedLogFile> candidates) =>
+        candidates
+            .Select(l => (Log: l, Last: LastEntry(l.FullPath)))
+            .OrderByDescending(c => c.Last ?? DateTime.MinValue)
+            .ThenByDescending(c => InSupportFolder(c.Log.FullPath))
+            .ThenByDescending(c => Depth(c.Log.FullPath))
+            .ThenByDescending(c => c.Log.SizeBytes)
+            .First().Log;
+
+    private static DateTime? LastEntry(string path)
+    {
+        var entries = ChangeLogFile.ParseFile(path);
+        return entries.Count == 0 ? null : entries.Max(e => e.Timestamp);
     }
 
     private static bool InSupportFolder(string path) =>
