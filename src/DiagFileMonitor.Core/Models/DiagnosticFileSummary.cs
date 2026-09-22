@@ -92,14 +92,14 @@ public class DiagnosticFileSummary
         TicketNumber = file.TicketNumber,
         IsBaseline = file.IsBaseline,
         ZohoTicketNumber = file.ZohoTicketNumber,
-        // Change.log moved in some SDN versions; read the live copy, not the one left behind.
-        ChangeLogPath = BundleLogs.PathOf(file, LogFileKind.ChangeLog) is { Length: > 0 } changeLog ? changeLog : null,
+        // Logs moved between SDN versions; open the copy the report read, not one left behind.
+        ChangeLogPath = PathOf(file, LogFileKind.ChangeLog),
         MachineLogPath = PathOf(file, LogFileKind.MachineLog),
         ErrorLogPath = PathOf(file, LogFileKind.ErrorLog)
     };
 
     private static string? PathOf(DiagnosticFile file, LogFileKind kind) =>
-        file.LogFiles.FirstOrDefault(log => log.Kind == kind)?.FullPath;
+        BundleLogs.PathOf(file, kind) is { Length: > 0 } path ? path : null;
 
     private static string Display(string? value) => string.IsNullOrWhiteSpace(value) ? Unknown : value;
 }

@@ -26,8 +26,10 @@ public class BundleLogSet
 /// Picking a log is not just a filename match. An export can carry more than one file called
 /// MachineLog.txt - the live one under the dated support folder and a stale placeholder at the
 /// root of the SDN install - and reading the wrong one means analysing a machine's history from
-/// months ago while believing it is from this morning. Deepest path wins, with the support
-/// folder preferred outright, then size; and when there was a choice to make, the report says so.
+/// months ago while believing it is from this morning. Logs also moved between SDN versions,
+/// leaving old copies behind. So the freshest copy wins - newest entry, or for MachineLog the
+/// newest file - then the support folder, depth and size break a tie; and when there was a
+/// choice to make, the report says so.
 /// </para>
 /// </summary>
 public static class BundleLogs
@@ -55,13 +57,7 @@ public static class BundleLogs
         var candidates = bundle.LogFiles.Where(l => l.Kind == kind).ToList();
         if (candidates.Count == 0) return string.Empty;
 
-        var best = kind == LogFileKind.ChangeLog && candidates.Count > 1
-            ? NewestChangeLog(candidates)
-            : candidates
-                .OrderByDescending(l => InSupportFolder(l.FullPath))
-                .ThenByDescending(l => Depth(l.FullPath))
-                .ThenByDescending(l => l.SizeBytes)
-                .First();
+        var best = candidates.Count == 1 ? candidates[0] : Newest(candidates, kind);
 
         if (candidates.Count > 1 && notes is not null)
         {
@@ -93,25 +89,50 @@ public static class BundleLogs
     }
 
     /// <summary>
-    /// Change.log moved in some SDN versions, and the old copy is left behind. M20771 carried
-    /// both: the deeper Logs/Support copy stopped in March, the one at the root ran to that
-    /// morning and held a fixed side puller home position change. Reading the old one says
-    /// "nothing changed" - exactly the wrong answer. Change.log only ever grows, so the copy with
-    /// the newest entry is the live one, wherever it sits. Folder rules only break a tie.
+    /// Logs moved between SDN versions and the old copies stay behind. M20771 carried two
+    /// Change.logs: the deeper Logs/Support copy stopped in March, the one at the root ran to
+    /// that morning and held a fixed side puller home position change. Reading the old one says
+    /// "nothing changed" - exactly the wrong answer. So the freshest copy wins, wherever it sits:
+    /// <list type="bullet">
+    /// <item>Change.log and ErrLog lines are dated, so the copy with the newest entry.</item>
+    /// <item>MachineLog lines carry a time but no date, so the copy last written - extraction
+    /// keeps each file's time from the zip.</item>
+    /// </list>
+    /// A copy with nothing in it never beats one with something in it, and the folder rules only
+    /// break a tie.
     /// </summary>
-    private static ExtractedLogFile NewestChangeLog(List<ExtractedLogFile> candidates) =>
+    private static ExtractedLogFile Newest(List<ExtractedLogFile> candidates, LogFileKind kind) =>
         candidates
-            .Select(l => (Log: l, Last: LastEntry(l.FullPath)))
-            .OrderByDescending(c => c.Last ?? DateTime.MinValue)
+            .Select(l => (Log: l, Fresh: Freshness(l.FullPath, kind)))
+            .OrderByDescending(c => c.Fresh.HasContent)
+            .ThenByDescending(c => c.Fresh.Newest ?? DateTime.MinValue)
             .ThenByDescending(c => InSupportFolder(c.Log.FullPath))
             .ThenByDescending(c => Depth(c.Log.FullPath))
             .ThenByDescending(c => c.Log.SizeBytes)
             .First().Log;
 
-    private static DateTime? LastEntry(string path)
+    private static (bool HasContent, DateTime? Newest) Freshness(string path, LogFileKind kind)
     {
-        var entries = ChangeLogFile.ParseFile(path);
-        return entries.Count == 0 ? null : entries.Max(e => e.Timestamp);
+        if (!File.Exists(path)) return (false, null);
+
+        switch (kind)
+        {
+            case LogFileKind.ChangeLog:
+            {
+                var entries = ChangeLogFile.ParseFile(path);
+                return (entries.Count > 0, entries.Count == 0 ? null : entries.Max(e => e.Timestamp));
+            }
+            case LogFileKind.ErrorLog:
+            {
+                var entries = ErrLogFile.ParseFile(path);
+                return (entries.Count > 0, entries.Count == 0 ? null : entries.Max(e => e.Timestamp));
+            }
+            default:
+            {
+                var info = new FileInfo(path);
+                return (info.Length > 0, info.LastWriteTimeUtc);
+            }
+        }
     }
 
     private static bool InSupportFolder(string path) =>
