@@ -1,147 +1,139 @@
 # Project Ejection RWE
 
-Standardising the Raked Wall Extruder V3 ejection sequence: what the variants actually are, what
-each step does, and what the settings really control.
+Standardising the Raked Wall Extruder V3 ejection: what the variants are, what each step does,
+and what the settings actually control.
 
-**Status: open.** This is the starting position, read from logs. Everything below is marked as
-either measured or open.
+**Status: open.** Read from logs. Everything below is measured unless marked open.
+
+## Correction to the first version of this document
+
+The first pass had the wrong sequence. It documented the **300-series** as the ejection. It is
+not - it is the **reload**: grippers coming *on* at steps 360 and 390 are them closing on the
+next panel's plates, which is why that sequence ends with `Waiting For Grippers To Close` and the
+gripper product sensors making.
+
+**The ejection is the 2000-series.** Everything below is that.
 
 ## Source
 
-Three machines, every ejection run in them:
-
-| Machine | Ejection runs |
-|---|---|
-| M21737 | 107 |
-| M21844 | 112 |
-| M20771 | 50 (across eleven exports, Feb 2025 - Sept 2026) |
-
-**269 ejection runs.**
+Three machines: M21737, M21844, and eleven M20771 exports spanning Feb 2025 to Sept 2026.
+**158 ejection runs**, of which **302 release-and-push pairs** could be timed in full.
 
 ---
 
-## 1. There is one sequence, not several
+## 1. The ejection is already nearly standard
 
-This is the first useful finding, and it cuts against how it is usually described.
-
-All 269 runs are the same spine with **four optional branches**. There are not several different
-ejection methods; there is one, with decision points.
-
-**The spine** (every run that completed follows this):
+Eight distinct step paths across 158 runs, and the spread is small:
 
 ```
-300 → 302 → 304 → 310 → [311] → 315 → 320 → [321…] → 330
-    → 350 → 351 → 352 → 360 → [355 → 357 → 352 → 360]
-    → 363 → 370 → 375 → [378…] → 380 → 390 → 391 → 392
+2000 2010 2011 2018 2019 2020 2030 2031 2040 2041 2045 2046 2047
+     2060 [2062 2063] 2068 2070 2080 2100 2110 2120 [2130 2140]
 ```
 
-**The four branches:**
+| Variant | Runs |
+|---|---|
+| Full spine, ends 2140 | 71 |
+| Full spine, ends 2120 | 65 |
+| With `2062 → 2063` | 15 |
+| Truncated (log ends / aborted) | 7 |
 
-| Branch | Runs | What it is |
+Only **two** real branches: the `2062 → 2063` pair, and whether it carries on past 2120. That is
+a far tighter sequence than the reload, and a good starting point to standardise from.
+
+---
+
+## 2. Safe vs normal - now measurable, and all 302 are normal
+
+Per the description:
+
+- **Normal** - grippers to 6040, release, then ejectors drive positive **while** grippers drive
+  negative at the same time.
+- **Safe** - grippers to 6040, release, grippers drive to 400 **and finish**, then the ejectors
+  drive positive.
+
+So the discriminator is the gap between the puller retract command and the ejector push command.
+
+| Machine | Ejections | Ejector push after puller retract | Overlapped |
+|---|---|---|---|
+| M21737 | 138 | median **+0.42 s** (+0.42 to +0.45) | 138/138 |
+| M21844 | 138 | median **+0.23 s** (+0.12 to +26.40) | 136/138 |
+| M20771 | 26 | median **+0.48 s** (+0.24 to +0.49) | 26/26 |
+
+**300 of 302 ejections are normal.** The push follows the retract by under half a second - they
+are running together, not one after the other.
+
+**A safe ejection has not been observed once in any of these logs.** Either it is rare, or it is
+not enabled on these three machines, or it is triggered by a panel type none of these days
+produced. That is question 1.
+
+The pullers go to **6000**, not 6040, on all three machines. Worth confirming whether 6040 is the
+spec and 6000 what is actually commanded, or whether the number varies by machine.
+
+---
+
+## 3. Staged release is staged by SIDE, not by upper/lower
+
+This is the other thing the first pass had wrong.
+
+Both grippers on a side drop together - lower and upper, same millisecond. What is staged is the
+**two sides**:
+
+```
++0.00s  pullers → 6000
++6.50s  step 2031   floating side: lower AND upper off
++14.34s step 2046   fixed side:    lower AND upper off
++19.81s pullers → 1200        }  together
++19.96s ejectors → 7225       }
+```
+
+| Machine | Gap between the two sides | Floating side first |
 |---|---|---|
-| `311` between 310 and 315 | 30 | Plate present bypass turned **off** |
-| `321` looping with 320 | 16 | Floating head laser sees an obstruction - the guard, covered in `docs/guard-stops.md` |
-| `355 → 357 → 352 → 360` | 21 | Side pullers re-enabled and the 352-360 stretch runs **again** |
-| `378` after 375 | 3 | `THNTD released early` - upper grippers **off**, back round |
+| M21737 | median **3.11 s** (3.08 - 8.87) | 138/138 |
+| M21844 | median **7.64 s** (4.82 - 9.33) | 138/138 |
+| M20771 | median **3.09 s** (2.80 - 8.52) | 26/26 |
 
-The most common path (137 of 269) runs the full spine with no branch at all.
+**The floating side always releases first.** 302 out of 302, all three machines. Not once the
+other way.
 
----
+### The settings do not cleanly explain the gap
 
-## 2. What each step does
-
-Measured from what happens inside each step across all 269 runs.
-
-| Step | Ran | Median | What happens in it |
+| Machine | StagedGripperRelease | ReleaseGrippersTogether | Side gap |
 |---|---|---|---|
-| 300 | 269 | 0.18 s | Reset lamps **on**, plate supports **off** |
-| 302 | 269 | 1.08 s | Plate clamps up |
-| 304 | 267 | 0.24 s | Both side pullers commanded to move |
-| 310 | 266 | 0.24 s | Both eject servos commanded to move |
-| **311** | 34 | 0.44 s | Plate present bypass **off** |
-| 315 | 265 | 0.19 s | TrolleyHeight and FloatingSideHeight axes **disabled** |
-| 320 | 348 | - | Floating head asked to move in; THNTD presses land here |
-| **321** | 39 | - | Laser obstruction. Polls back to 320 until clear |
-| 330 | 254 | - | Nodes 4 and 5 servo-disabled |
-| 350 | 220 | 0.29 s | FloatingSideHeight and TrolleyHeight commanded |
-| 351 | 220 | 2.75 s | FloatingSideHeight disabled, **rack lock on** |
-| 352 | 227 | - | Nodes settling |
-| **355** | 26 | - | Both side pullers **axis re-enabled** |
-| **357** | 26 | - | Nodes 0 and 1 back to OK |
-| 360 | 224 | 2.95 s | **Lower grippers on**, both sides. Pullers move. Plate present bypass back **on** |
-| 363 | 198 | - | Trolley bottom clamps cycle closed |
-| 370 | 198 | - | THNTD released |
-| 375 | 198 | 0.18 s | Clamped/fire release lamp **on** - the operator prompt |
-| **378** | 3 | 8.12 s | `THNTD released early` - **upper grippers off** |
-| 380 | 201 | **10.22 s** | Release lamp **off**. The longest step in the sequence |
-| 390 | 195 | 0.18 s | **Upper grippers on**, both sides |
-| 391 | 198 | - | `Waiting For Grippers To Close`; gripper product sensors make |
-| 392 | 172 | - | `Clamps Within safe distance - Auto Clamping`; plate heights read |
+| M21737 | not in its change log | not in its change log | 3.11 s |
+| M21844 | **True** (14 Jul 2026) | not in its change log | **7.64 s** |
+| M20771 | **True** (26 Feb 2025) | **False** (7 Nov 2024) | 3.09 s |
+
+M21844 and M20771 both have `StagedGripperRelease = True` and sit **4.5 seconds apart** on the
+one number that setting is named for. So either something else sets the gap, or the setting does
+something other than its name suggests.
+
+That is worth 4.5 s × every panel on M21844.
 
 ---
 
-## 3. The grippers - what the logs show, and what they do not
+## 4. Open questions, in order
 
-The two settings are `StagedGripperRelease` and `ReleaseGrippersTogether`. **The observed
-behaviour does not line up with either of them.**
+1. **What triggers a safe ejection?** Never seen in 302 runs. Panel complexity, a setting, or an
+   operator choice?
+2. **Why is M21844's side gap 7.64 s when M20771's is 3.09 s**, with the same
+   `StagedGripperRelease` setting? If the 3.1 s machines are fine, M21844 is giving away 4.5 s a
+   panel.
+3. **What do `StagedGripperRelease` and `ReleaseGrippersTogether` actually change?** Neither
+   predicts what the logs show.
+4. **What are steps 2062 and 2063?** The only real branch in the sequence, 15 runs of 158.
+5. **Is 6040 or 6000 the intended release position?** All three machines command 6000.
 
-What actually happens in all 269 runs: **lower grippers come on at step 360, upper grippers at
-step 390.** Between them sit steps 363, 370, 375 and 380 - including the operator prompt and a
-**10.2 second** dwell at 380. Lower and upper are never simultaneous in any log here.
+## 5. What would move this fastest
 
-There is exactly **one** variant, and it is small:
-
-| Where upper grippers come on | Count |
-|---|---|
-| Step 390 | 390 of 396 (98.5%) |
-| Step 380 | 6 (1.5%) |
-
-All six of the step-380 cases are in **one M20771 export** (the 21 Sept 2026 one), not spread
-across that machine's history.
-
-And the settings do not predict it:
-
-| Machine | StagedGripperRelease | ReleaseGrippersTogether | Uppers at |
-|---|---|---|---|
-| M21737 | not in its change log | not in its change log | 390, 100% |
-| M21844 | **True** (14 Jul 2026) | not in its change log | 390, 100% |
-| M20771 | **True** (26 Feb 2025) | **False** (7 Nov 2024) | 390 90%, 380 10% |
-
-M21844 has `StagedGripperRelease = True` and never once uses the 380 variant. So whatever that
-setting changes, **it is not which step the upper grippers come on at** - or it is, and something
-else overrides it.
-
-**This is the first thing to settle with the engineering team.** Two settings named for gripper
-release, and the logs show one variant that neither of them predicts.
-
----
-
-## 4. Open questions, in the order worth answering
-
-1. **What do `StagedGripperRelease` and `ReleaseGrippersTogether` actually change?** The names
-   suggest they control what the logs show happening at 360 and 390, and the evidence says they
-   do not. Ask the PLC author before anything else.
-2. **What is the 10.2 second step 380?** It is the single longest step in the ejection. Is it a
-   timer, an operator wait, or a motion? The release lamp goes off at its start and the upper
-   grippers come on at its end. 269 runs × 10.2 s is real money.
-3. **What decides step 311?** Plate present bypass off, on 30 of 269 runs. Panel type, or a
-   setting?
-4. **What decides the 355 → 357 loop?** The 352-360 stretch runs a second time on 21 runs. A
-   retry, or a per-section repeat on a more complex panel?
-5. **Is `THNTD released early` (step 378) recoverable or a restart?** Three runs. Median 8.12 s
-   and the upper grippers drop.
-
-## 5. What I need to go further
-
-- **The PLC step numbers with their names.** The logs give numbers; the program gives meaning.
-  This would answer questions 2-5 outright.
-- **A log from a machine with `ReleaseGrippersTogether = True`.** All three here have it False or
-  unset, so the setting's effect has never been observed.
-- **Panel complexity alongside a few runs.** Simple vs raked vs with-openings, for a handful of
-  ejections, would tie the branches to panel type - which is the thing you actually want to
-  standardise on.
+- **The PLC step names for the 2000-series.** Twenty-two numbered steps; the program has their
+  names. That answers 4 outright and probably 1 and 3.
+- **A log containing a safe ejection.** If someone can make one happen on a test panel and export
+  it, the discriminator above will identify it immediately and the whole branch becomes
+  measurable.
+- **`ReleaseGrippersTogether = True` on any machine.** All three here have it False or unset.
 
 ## Changelog
 
-- **2026-09-22** - Project opened. 269 ejection runs read from three machines. One spine and four
-  branches established; the gripper settings found not to predict the observed variant.
+- **2026-09-22** - Opened, then corrected. First pass documented the 300-series reload as the
+  ejection; the ejection is the 2000-series. Staged release found to be by side, not upper/lower,
+  with the floating side first in 302 of 302. All 302 timed ejections are normal, not safe.
