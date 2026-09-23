@@ -120,7 +120,8 @@ compile and XAML-binding checks. Check it on Windows with an "out by 30mm" issue
 2. ~~M21868 July, 140 mm~~ - answered: the gun was not reaching its reed; moving the reed fixed it.
 3. **MembersSubAssembled field 2** is taken as fasteners fired (3, 5, 7, 11, 13 against the block
    count). Unverified - count the nails on one component.
-4. **M17311:** has anyone asked about PLC steps 120 -> 125 and 125 -> 130, or tried a shorter dwell?
+4. **M17311:** PLC steps 120 -> 125 and 125 -> 130 forwarded to the PLC programmers (23 September
+   2026) - waiting on their reply.
 5. **Project Ejection RWE** - all open questions are in
    [project-ejection-rwe.md](project-ejection-rwe.md#4-open-questions-in-order): safe-ejection
    examples (the user was going to find some), 2000-series PLC step names, a log with
