@@ -35,10 +35,9 @@ any machine, gives the count, the spread and whether all readings fell short, ti
 the clamps going down against the good-cycle lock time, lists clamp/lock delay changes from
 Change.log, and for nog height quotes the M21868 cause. The earlier report missed all 41.
 
-**Open:** what fixed it on the machine - flow control / exhaust restrictor, air supply, the
-cylinder or its guides, or a setting? Nobody has said yet. When it is known, add it to the
-`SeenBefore` text for "Nog Height" in `MeasurementCheck.cs` and to
-[cases/M21868/README.md](cases/M21868/README.md), so the next tech knows where to look first.
+**Fix, confirmed:** the nog clamp's flow control needed opening right up. Recorded in the
+`SeenBefore` text for "Nog Height" in `MeasurementCheck.cs`, the Component Nailer clamp complaint
+topic, and [cases/M21868/README.md](cases/M21868/README.md).
 
 **Not a lead, and why:** `ClampAirOK` (1.7) changes to 1 on the last line, 10:55:22. Five other
 inputs "change" in the same instant, four never seen before that session, and in the July bundles
@@ -58,8 +57,9 @@ Written up in [cases/M21868/README.md](cases/M21868/README.md). In short:
 - **July bundles, "140 mm fires two nails and won't move to the next nog":** step 230 waits on
   `Waiting for Gun(s) to Correct Heights` after turning on `IO-UpperGunLowerGoHigh` (output 0.3).
   The confirming input `UpperGunLowerIsHigh` (0.6, InUse, not simulated) never changes once in
-  any of the four bundles. 66 times unanswered in the third July bundle. **Not yet confirmed on
-  the machine** - see open questions.
+  any of the four bundles. 66 times unanswered in the third July bundle. **Confirmed fix:** the
+  gun was not reaching its reed switch; moving the reed fixed it. A Component Nailer complaint like
+  this now opens with "Stops after the first nails on wider timber".
 - **Stale files:** the SDN folder's root `SupportInfo.txt` says TornadoM450 / Carters Auckland,
   with 2017 production logs and other models' configs. That is the install image it was copied
   from, not this machine.
@@ -116,9 +116,8 @@ compile and XAML-binding checks. Check it on Windows with an "out by 30mm" issue
 
 ## 5. Open questions
 
-1. **M21868 nog clamp - what was the fix on the machine?** (Section 1.)
-2. **M21868 July, 140 mm:** is the upper gun's lower cylinder reaching the top, and is its high
-   reed (input 0.6) there and set? Does the valve on output 0.3 shift? Was this fixed?
+1. ~~M21868 nog clamp fix~~ - answered: flow control opened right up.
+2. ~~M21868 July, 140 mm~~ - answered: the gun was not reaching its reed; moving the reed fixed it.
 3. **MembersSubAssembled field 2** is taken as fasteners fired (3, 5, 7, 11, 13 against the block
    count). Unverified - count the nails on one component.
 4. **M17311:** has anyone asked about PLC steps 120 -> 125 and 125 -> 130, or tried a shorter dwell?
@@ -132,11 +131,11 @@ compile and XAML-binding checks. Check it on Windows with an "out by 30mm" issue
 
 ## 6. Next steps
 
-1. Record the nog clamp fix once known (section 1). The complaint topic is done: on a Component
+1. Done: the nog clamp fix (flow control) is recorded, and the complaint topic is done: on a Component
    Nailer, "clamp won't engage" now opens with "Nog or stud clamp will not engage", which points
    at THE MACHINE'S OWN CHECKS FAILED and lists every clamp/lock setting change.
-2. Get a confirmed answer on the July upper-gun sensor, then add it to the Component Nailer
-   knowledge (there is no `ComponentNailerKnowledge` yet - only Raked Wall Extruder and Tornado).
+2. Done as a complaint topic: the July upper-gun reed fix. A full `ComponentNailerKnowledge` (axes,
+   start-up, known faults) still does not exist - only Raked Wall Extruder and Tornado.
 3. Import M21868 on the user's PC and check the production page matches: about 5,094 components,
    0.37%.
 4. Run the photo panel on Windows.

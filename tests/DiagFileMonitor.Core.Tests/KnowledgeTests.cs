@@ -1060,6 +1060,15 @@ public class ComplaintTopicModelGatingTests
     }
 
     [Fact]
+    public void TheM21868JulyComplaintPointsAtTheUpperGunReed()
+    {
+        var topic = Route("fires two nails on 140 mm and won't move to the next nog", "ComponentNailerV2").Topics[0];
+
+        Assert.Equal("Stops after the first nails on wider timber", topic.Topic.Name);
+        Assert.Contains("reed", topic.Topic.LookAt[1]);
+    }
+
+    [Fact]
     public void TheComponentNailerClampTopicDoesNotFireOnAWallExtruder()
     {
         var findings = Route("clamp wont engage", "RakingWallExtruderV3DG");

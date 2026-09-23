@@ -25,14 +25,17 @@ This is the machine that showed a Component Nailer counts **components**, not pa
 4. When the output turns off, `UpperGunLowerIsLow` blips 0 then 1 about 0.4 s later - the cylinder
    lifting a hair and dropping back, or the valve acting the wrong way round.
 
-Look at: the upper gun lower cylinder and its high reed (0.6) - does the cylinder reach the top,
-is the reed there and set, does the valve on output 0.3 shift. In the September bundle that move
+**Fix, confirmed:** the gun was not reaching its reed switch. Moving the reed so the gun reaches it
+fixed it. In the September bundle that move
 was never asked for and 68 components went through, which fits the operator's 90 mm working.
 
 ## Support bundle 17 September - "clamp won't engage and clamp nog" (panel 9, soffit nog)
 
 **Cause, found on the machine:** the nog clamp was coming down very slowly from its upper position
 (about 200 mm) and was locked in place before it arrived at its 45 mm position.
+
+**Fix:** the nog clamp's flow control needed opening right up. Not the delays, the air supply or
+the cylinder.
 
 What the log shows, now that the cause is known:
 
@@ -43,8 +46,8 @@ What the log shows, now that the cause is known:
 - On every failure the height check comes at **2.62 s**, the same each time - a set time running
   out - with no lock logged before it.
 - Change.log shows `ClampDelay` and `LockDelay` changed 13 times on 10-11 June 2026 (LockDelay
-  200, 280, 500, 200, 1000, 100, 500, 1000, 200). Worth checking the clamp's speed before
-  reaching for those again.
+  200, 280, 500, 200, 1000, 100, 500, 1000, 200). Those were working around a slow clamp; the
+  flow control was the fix. Check it before reaching for the delays again.
 
 The report now has a **THE MACHINE'S OWN CHECKS FAILED** section that reads every
 `Incorrect ... Expected : X Got: Y` message on any machine, gives the count, spread and clamp

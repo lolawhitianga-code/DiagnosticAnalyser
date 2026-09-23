@@ -185,10 +185,36 @@ public static class ComplaintTopics
                 "THE MACHINE'S OWN CHECKS FAILED below, if it is there. A nog height check that "
                     + "fails short every time, at the same moment after the clamps go down, is a set "
                     + "time running out while the clamp is still on its way down.",
-                "How fast the nog clamp comes down from its upper position. On M21868 it was coming "
-                    + "down very slowly and was locked in place before it reached 45 mm.",
+                "The nog clamp's flow control. On M21868 the clamp was coming down very slowly and was "
+                    + "locked in place before it reached 45 mm; opening the flow control right up fixed it.",
                 "Then ClampDelay and LockDelay - every change is listed below. Changing them back and "
                     + "forth works around a slow clamp rather than fixing it."
+            }
+        },
+        // From M21868 in July: "fires two nails on 140 mm and won't move to the next nog". Step 230
+        // sat on "Waiting for Gun(s) to Correct Heights" because the upper gun never reached its
+        // high reed. Moving the reed so the gun reaches it fixed it.
+        new()
+        {
+            Name = "Stops after the first nails on wider timber",
+            Models = new[] { "ComponentNailer" },
+            Keywords = new[]
+            {
+                "two nails", "2 nails", "next nog", "140", "190", "gun height", "correct heights",
+                "wont move", "won't move", "stops after"
+            },
+            LogTags = new[] { "UpperGunLower", "Correct Heights" },
+            SettingWords = new[] { "gun" },
+            LookAt = new[]
+            {
+                "Whether the log repeats \"Waiting for Gun(s) to Correct Heights\". On wider timber "
+                    + "the upper gun's lower cylinder is sent high (IO-UpperGunLowerGoHigh) and the "
+                    + "machine waits for UpperGunLowerIsHigh. If that input never changes, the gun is "
+                    + "not reaching its reed switch.",
+                "The upper gun's high reed switch position. On M21868 the gun was not reaching the "
+                    + "reed; moving the reed so the gun reaches it fixed it.",
+                "Only then the valve on IO-UpperGunLowerGoHigh and the cylinder itself. 90 mm working "
+                    + "while 140 mm stops points at the high position, because 90 mm never asks for it."
             }
         },
         new()

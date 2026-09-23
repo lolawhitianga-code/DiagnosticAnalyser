@@ -62,6 +62,7 @@ public record MeasurementFindings(
 /// locked the clamp about 1.2 s after sending it down; every failed check came at 2.62 s with no
 /// lock logged before it. The cause, found on the machine: the nog clamp was coming down very
 /// slowly from its upper position (about 200 mm) and was locked in place before it reached 45 mm.
+/// Opening its flow control right up fixed it.
 /// </para>
 /// </summary>
 public static class MeasurementCheck
@@ -76,7 +77,8 @@ public static class MeasurementCheck
         ("Nog Height",
             "On M21868 (Mainland, Component Nailer V2, September 2026) this was the nog clamp coming "
             + "down very slowly from its upper position (about 200 mm) and being locked in place before "
-            + "it reached 45 mm. Check how fast the nog clamp comes down.")
+            + "it reached 45 mm. The fix was the nog clamp's flow control, which needed opening right up. "
+            + "Check the flow control before changing ClampDelay or LockDelay.")
     };
 
     /// <summary>How long after the clamps go down a lock or a check still belongs to them.</summary>

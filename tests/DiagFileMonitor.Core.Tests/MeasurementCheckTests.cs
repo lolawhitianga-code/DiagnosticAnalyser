@@ -61,6 +61,7 @@ public class MeasurementCheckTests
         var check = Assert.Single(Check(null, FailedCycle).Failed);
 
         Assert.Contains("locked in place before it reached 45 mm", check.SeenBefore);
+        Assert.Contains("flow control", check.SeenBefore);
     }
 
     [Fact]
