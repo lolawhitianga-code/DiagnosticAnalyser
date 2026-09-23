@@ -193,8 +193,66 @@ public static class MachineIoMap
         new(SignalKind.Output, "IO-StudPinUp", 3, new[] { "1.3", "1.8", "20.0" }),
     };
 
+    /// <summary>
+    /// Component Nailer V2 - 33 named points, each fitted once. Front and back clamps are named
+    /// separately rather than paired.
+    /// <para>
+    /// Read from the machine's own Diagnostics screens (September 2026), and the numbers checked
+    /// against the M21868 logs: IO-VertFrontClamp at 0.8, IO-VertBackClamp at 0.7,
+    /// UpperGunLowerIsHigh at 0.6, IO-UpperGunLowerGoHigh at 0.3.
+    /// </para>
+    /// <para>
+    /// <b>Left out on purpose:</b> points the screen shows as Not In Use - HorizClampExtended,
+    /// ThreePhaseOK, LowerNailSensor, UpperNailSensor, PlateHeightOver85, UpperGunWoodSensor,
+    /// LowerGunWoodSensor and the HorizClampBack output. They never change, so listing them would
+    /// report every one as a sensor that never came on.
+    /// </para>
+    /// <para>
+    /// THNTD and both clamp lock outputs are inverted on the screen. The four analog inputs
+    /// (FixedSideHeight, NogDistaceFromTopOfPlate, AirPressure, ClampAirPressure) are not
+    /// here because the log does not record them as input changes.
+    /// </para>
+    /// </summary>
+    public static readonly IReadOnlyList<KnownSignal> ComponentNailerV2 = new KnownSignal[]
+    {
+        new(SignalKind.Input, "THNTD", 1, new[] { "0.1" }),
+        new(SignalKind.Input, "ProductSensor", 1, new[] { "0.2" }),
+        new(SignalKind.Input, "UpperGunUpperIsLow", 1, new[] { "0.3" }),
+        new(SignalKind.Input, "UpperGunUpperIsHigh", 1, new[] { "0.4" }),
+        new(SignalKind.Input, "UpperGunLowerIsLow", 1, new[] { "0.5" }),
+        new(SignalKind.Input, "UpperGunLowerIsHigh", 1, new[] { "0.6" }),
+        new(SignalKind.Input, "FenceRetracted", 1, new[] { "0.7" }),
+        new(SignalKind.Input, "HorizClampRetracted", 1, new[] { "0.8" }),
+        new(SignalKind.Input, "VertClampBackExtended", 1, new[] { "0.9" }),
+        new(SignalKind.Input, "VertClampBackRetracted", 1, new[] { "0.10" }),
+        new(SignalKind.Input, "VertFrontClampExtended", 1, new[] { "0.11" }),
+        new(SignalKind.Input, "VertFrontClampRetracted", 1, new[] { "0.12" }),
+        new(SignalKind.Input, "TableUpRetracted", 1, new[] { "1.0" }),
+        new(SignalKind.Input, "TableUpExtended", 1, new[] { "1.1" }),
+        new(SignalKind.Input, "ClampLift5mmRetracted", 1, new[] { "1.2" }),
+        new(SignalKind.Input, "ClampLift5mmExtended", 1, new[] { "1.3" }),
+        new(SignalKind.Input, "GunAirOK", 1, new[] { "1.6" }),
+        new(SignalKind.Input, "ClampAirOK", 1, new[] { "1.7" }),
+        new(SignalKind.Output, "IO-LowerGunFire", 1, new[] { "0.0" }),
+        new(SignalKind.Output, "IO-UpperGunFire", 1, new[] { "0.1" }),
+        new(SignalKind.Output, "IO-THNTDLED", 1, new[] { "0.2" }),
+        new(SignalKind.Output, "IO-UpperGunLowerGoHigh", 1, new[] { "0.3" }),
+        new(SignalKind.Output, "IO-UpperGunUpperGoHigh", 1, new[] { "0.4" }),
+        new(SignalKind.Output, "IO-FenceUp", 1, new[] { "0.5" }),
+        new(SignalKind.Output, "IO-HorizClamp", 1, new[] { "0.6" }),
+        new(SignalKind.Output, "IO-VertBackClamp", 1, new[] { "0.7" }),
+        new(SignalKind.Output, "IO-VertFrontClamp", 1, new[] { "0.8" }),
+        new(SignalKind.Output, "IO-VertTableUp", 1, new[] { "0.9" }),
+        new(SignalKind.Output, "IO-VertBackClampLock", 1, new[] { "1.0" }),
+        new(SignalKind.Output, "IO-VertFrontClampLock", 1, new[] { "1.1" }),
+        new(SignalKind.Output, "IO-ClampLift5mm", 1, new[] { "1.2" }),
+        new(SignalKind.Output, "IO-VertBackClampUp", 1, new[] { "1.3" }),
+        new(SignalKind.Output, "IO-VertFrontClampUp", 1, new[] { "1.4" }),
+    };
+
     private static readonly (string Prefix, IReadOnlyList<KnownSignal> Points)[] ByModel =
     {
+        ("ComponentNailerV2", ComponentNailerV2),
         ("RakingWallExtruderV3", RakedWallExtruderV3),
         ("RakedWallExtruderV3", RakedWallExtruderV3),
         ("WallSheather", WallSheather),

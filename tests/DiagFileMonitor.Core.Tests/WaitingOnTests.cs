@@ -223,6 +223,23 @@ public class MachineIoMapTests
     }
 
     /// <summary>
+    /// From the machine's Diagnostics screens. Not In Use points are left out, or the report
+    /// would call every one a sensor that never came on.
+    /// </summary>
+    [Fact]
+    public void KnowsTheComponentNailerV2ByName()
+    {
+        var points = MachineIoMap.For("ComponentNailerV2");
+
+        Assert.Equal(33, points.Count);
+        Assert.Equal(18, points.Count(p => p.Kind == SignalKind.Input));
+        Assert.DoesNotContain(points, p => p.IsPaired);
+        Assert.Null(MachineIoMap.Find("ComponentNailerV2", SignalKind.Input, "UpperGunWoodSensor"));
+        Assert.Equal(new[] { "0.6" },
+            MachineIoMap.Find("ComponentNailerV2", SignalKind.Input, "UpperGunLowerIsHigh")!.PointsSeen);
+    }
+
+    /// <summary>
     /// The numbering is not the identity. Support: "the actual number of the IO is less important
     /// than the name of the IO" - some machines run a point on node 5 and some on node 6.
     /// </summary>
