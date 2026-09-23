@@ -227,8 +227,10 @@ public class PanelClassifier
     /// The log states no build time for a component, so it is measured from the first member
     /// placed for it (or the panel start or previous component, where blocks were fired with
     /// nothing placed) to the moment it closed. A stud with nothing placed and nothing fired gets
-    /// no build time, so it reads as stepped past rather than as a fault. Field 2 steps 3, 5, 7, 11, 13 against the block count and is taken as
-    /// fasteners fired - UNVERIFIED, stored raw like PanelAssembled's count and never converted.
+    /// no build time, so it reads as stepped past rather than as a fault. Field 2 is a nail counter that runs exactly one
+    /// short of the nails the nogs need (2 per 90 mm nog, 3 per 140, 4 per 190) - see
+    /// docs/prodlog-v2-members-sub-assembled.md. Stored raw and only used to tell whether anything
+    /// fired; never report it as a nail count.
     /// Lengths here are millimetres, where MemberAssembled's are metres.
     /// </para>
     /// </summary>

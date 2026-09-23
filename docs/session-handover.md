@@ -118,8 +118,9 @@ compile and XAML-binding checks. Check it on Windows with an "out by 30mm" issue
 
 1. ~~M21868 nog clamp fix~~ - answered: flow control opened right up.
 2. ~~M21868 July, 140 mm~~ - answered: the gun was not reaching its reed; moving the reed fixed it.
-3. **MembersSubAssembled field 2** is taken as fasteners fired (3, 5, 7, 11, 13 against the block
-   count). Unverified - count the nails on one component.
+3. ~~MembersSubAssembled field 2~~ - answered by the field guide
+   ([prodlog-v2-members-sub-assembled.md](prodlog-v2-members-sub-assembled.md)): it runs one short
+   of the real nail count, which comes from the nog sizes.
 4. **M17311:** PLC steps 120 -> 125 and 125 -> 130 forwarded to the PLC programmers (23 September
    2026) - waiting on their reply.
 5. **Project Ejection RWE** - all open questions are in

@@ -74,9 +74,14 @@ one closes with a line the wall extruders never write:
 MembersSubAssembled, 20260914 07:15:58, 2, 5, Nogging-13, 0.0022365, 355,Nogging-13, 0.0022365, 355,Common Stud-10, 0.0146853, 2331
 ```
 
-Field 1 is the blocks nailed on, field 2 steps 3, 5, 7, 11, 13 with it and is taken as fasteners
-fired (**unverified**, stored raw), then a name, cube and length **in millimetres** for every member.
-The stud can be first or last in the list.
+Field 1 is the blocks nailed on. Field 2 is a nail counter that runs **exactly one short** of the
+nails the nogs need: 2 per 90 mm nog, 3 per 140 mm, 4 per 190 mm. Then a name, cube and length
+**in millimetres** for every member. The stud can be first or last in the list. The full field
+guide is [prodlog-v2-members-sub-assembled.md](prodlog-v2-members-sub-assembled.md).
+
+The line above checks out: each nog is 0.0022365 m³ over 355 mm = 6,300 mm², which is 45×140, so
+2 nogs need 6 nails and the counter says 5. Field 2 is stored raw and only used to tell whether
+anything fired at all - never as a nail count.
 
 `PanelAssembled` is almost absent: **5 in 17 weeks against 5,117 components**. Read the panel way,
 the machine made 22 panels and "superseded" 1,151 - which says it did nothing. Read as components:
