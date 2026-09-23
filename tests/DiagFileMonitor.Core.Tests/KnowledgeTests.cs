@@ -1051,6 +1051,23 @@ public class ComplaintTopicModelGatingTests
     }
 
     [Fact]
+    public void TheM21868ClampComplaintPointsAtTheMachinesOwnChecks()
+    {
+        var topic = Route("clamp wont engage and clamp nog", "ComponentNailerV2").Topics[0];
+
+        Assert.Equal("Nog or stud clamp will not engage", topic.Topic.Name);
+        Assert.Contains("THE MACHINE'S OWN CHECKS FAILED", topic.Topic.LookAt[0]);
+    }
+
+    [Fact]
+    public void TheComponentNailerClampTopicDoesNotFireOnAWallExtruder()
+    {
+        var findings = Route("clamp wont engage", "RakingWallExtruderV3DG");
+
+        Assert.DoesNotContain(findings.Topics, t => t.Topic.Name.StartsWith("Nog or stud clamp"));
+    }
+
+    [Fact]
     public void TornadoTopicsDoNotFireOnAWallExtruder()
     {
         // A wall extruder operator saying "wrong size" means timber, not an infeed laser.

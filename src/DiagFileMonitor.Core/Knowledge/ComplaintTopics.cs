@@ -168,6 +168,29 @@ public static class ComplaintTopics
                     + "side on its own with nothing moving is a sensor glitch."
             }
         },
+        // From M21868: "clamp wont engage and clamp nog" matched nothing, because every clamp topic
+        // was gated to the wall extruders. The machine had logged the answer 41 times in numbers.
+        new()
+        {
+            Name = "Nog or stud clamp will not engage",
+            Models = new[] { "ComponentNailer" },
+            Keywords = new[]
+            {
+                "clamp", "nog", "engage", "wont lock", "won't lock", "not locking", "lock"
+            },
+            LogTags = new[] { "VertFrontClamp", "VertBackClamp", "ClampLock" },
+            SettingWords = new[] { "clamp", "lock" },
+            LookAt = new[]
+            {
+                "THE MACHINE'S OWN CHECKS FAILED below, if it is there. A nog height check that "
+                    + "fails short every time, at the same moment after the clamps go down, is a set "
+                    + "time running out while the clamp is still on its way down.",
+                "How fast the nog clamp comes down from its upper position. On M21868 it was coming "
+                    + "down very slowly and was locked in place before it reached 45 mm.",
+                "Then ClampDelay and LockDelay - every change is listed below. Changing them back and "
+                    + "forth works around a slow clamp rather than fixing it."
+            }
+        },
         new()
         {
             Name = "Studs skipped or in the wrong place",

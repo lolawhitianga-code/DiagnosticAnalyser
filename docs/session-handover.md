@@ -132,8 +132,9 @@ compile and XAML-binding checks. Check it on Windows with an "out by 30mm" issue
 
 ## 6. Next steps
 
-1. Record the nog clamp fix once known (section 1), and add a complaint topic so "clamp won't
-   engage" points straight at the measurement section.
+1. Record the nog clamp fix once known (section 1). The complaint topic is done: on a Component
+   Nailer, "clamp won't engage" now opens with "Nog or stud clamp will not engage", which points
+   at THE MACHINE'S OWN CHECKS FAILED and lists every clamp/lock setting change.
 2. Get a confirmed answer on the July upper-gun sensor, then add it to the Component Nailer
    knowledge (there is no `ComponentNailerKnowledge` yet - only Raked Wall Extruder and Tornado).
 3. Import M21868 on the user's PC and check the production page matches: about 5,094 components,
