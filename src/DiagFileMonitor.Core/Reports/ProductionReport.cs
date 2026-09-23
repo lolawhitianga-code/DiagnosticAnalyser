@@ -32,7 +32,7 @@ public static class ProductionReport
                 ? new ReportPeriod(from.ToDateTime(TimeOnly.MinValue),
                     to.ToDateTime(TimeOnly.MinValue).AddDays(1), "Production period")
                 : null,
-            Footer = "Spida Machinery. Panel counts, cube and lineal metres are measured from the "
+            Footer = $"Spida Machinery. {summary.Unit[..1].ToUpperInvariant()}{summary.Unit[1..]} counts, cube and lineal metres are measured from the "
                      + "machine's production log. Availability rests on the shift model printed above."
         };
 
@@ -59,7 +59,7 @@ public static class ProductionReport
         section.Blocks.Add(new HeroBlock
         {
             Figure = $"{s.PanelsCompleted:N0}",
-            Label = "panels completed",
+            Label = $"{s.Units} completed",
             Subline = $"{s.PanelsPerProductionDay:F1} a day on the days this machine produced anything."
         });
 
@@ -75,7 +75,7 @@ public static class ProductionReport
             },
             Rows =
             {
-                new ReportRow { Cells = { "Panels", $"{s.PanelsCompleted:N0}", $"{s.PanelsPerProductionDay:F1}" } },
+                new ReportRow { Cells = { s.UnitsTitle, $"{s.PanelsCompleted:N0}", $"{s.PanelsPerProductionDay:F1}" } },
                 new ReportRow { Cells = { "Cube (m3)", $"{s.Cube:F1}",
                     s.DaysWithOutput > 0 ? $"{s.Cube / s.DaysWithOutput:F2}" : "-" } },
                 new ReportRow { Cells = { "Lineal (m)", $"{s.Lineal:N0}",
@@ -90,7 +90,7 @@ public static class ProductionReport
             {
                 new ReportRow { Cells = { "Production days", $"{s.DaysWithOutput} of {s.CalendarDays}" } },
                 new ReportRow { Cells = { "Stepped past (routine HMI advance, not a fault)", $"{s.SteppedPast:N0}" } },
-                new ReportRow { Cells = { "Panels that went wrong", $"{s.Faults:N0}" } },
+                new ReportRow { Cells = { $"{s.UnitsTitle} that went wrong", $"{s.Faults:N0}" } },
                 new ReportRow { Cells = { "Fault rate", s.FaultRate is { } r ? $"{r:P2}" : "-" } },
                 new ReportRow
                 {
@@ -106,7 +106,7 @@ public static class ProductionReport
                     Muted = s.Shift.Ignored,
                     Cells =
                     {
-                        "Panels an hour, while running / across the shift",
+                        $"{s.UnitsTitle} an hour, while running / across the shift",
                         s.RateWhileRunning is { } running && s.RateAcrossShift is { } across
                             ? $"{running:F1} / {across:F1}"
                             : "-"
@@ -189,14 +189,14 @@ public static class ProductionReport
     {
         var section = new ReportSection
         {
-            Title = "Panels the machine did not build",
+            Title = $"{s.UnitsTitle} the machine did not build",
             Subtitle = $"{s.SteppedPast:N0} stepped past, {s.Faults:N0} went wrong."
         };
 
         section.Blocks.Add(new CalloutBlock
         {
             Lead = "Stepped past is not a fault:",
-            Text = $"{s.SteppedPast:N0} panel(s) were advanced on the HMI without the machine being "
+            Text = $"{s.SteppedPast:N0} {s.Unit}(s) were advanced on the HMI without the machine being "
                    + "asked to build them - no time on the clock and nothing fired. That is how the "
                    + "job list is worked through. Counting it as a fault would drown out the "
                    + $"{s.Faults:N0} that really went wrong."
@@ -211,7 +211,7 @@ public static class ProductionReport
             {
                 Text = s.Faults == 0
                     ? "Nothing went wrong in this period."
-                    : "The panel-by-panel list is not available for this report."
+                    : $"The {s.Unit}-by-{s.Unit} list is not available for this report."
             });
 
             return section;
@@ -223,7 +223,7 @@ public static class ProductionReport
             Columns =
             {
                 new ReportColumn("When", ColumnStyle.Timestamp, 14),
-                new ReportColumn("Panel", ColumnStyle.Data, 14),
+                new ReportColumn(s.Output == OutputKind.Component ? "Panel / stud" : "Panel", ColumnStyle.Data, 14),
                 new ReportColumn("What happened", ColumnStyle.Text, 22),
                 new ReportColumn("Why it is recorded that way", ColumnStyle.Text, 50)
             }
@@ -278,7 +278,7 @@ public static class ProductionReport
             Columns =
             {
                 new ReportColumn("Day", ColumnStyle.Timestamp, 16),
-                new ReportColumn("Panels", ColumnStyle.Number, 12),
+                new ReportColumn(s.UnitsTitle, ColumnStyle.Number, 12),
                 new ReportColumn("Cube (m3)", ColumnStyle.Number, 14),
                 new ReportColumn("Lineal (m)", ColumnStyle.Number, 14),
                 new ReportColumn("Stepped past", ColumnStyle.Number, 14),
@@ -342,7 +342,7 @@ public static class ProductionReport
             Columns =
             {
                 new ReportColumn("Month", ColumnStyle.Data, 18),
-                new ReportColumn("Panels", ColumnStyle.Number, 14),
+                new ReportColumn(s.UnitsTitle, ColumnStyle.Number, 14),
                 new ReportColumn("Cube (m3)", ColumnStyle.Number, 17),
                 new ReportColumn("Lineal (m)", ColumnStyle.Number, 17),
                 new ReportColumn("Days", ColumnStyle.Number, 12),
@@ -384,7 +384,7 @@ public static class ProductionReport
             Tone = CalloutTone.Caution,
             Lead = "This is an assumption:",
             Text = "Availability is not measured. It is planned shift time, less breaks, less any "
-                   + "gap between panels longer than "
+                   + $"gap between {s.Units} longer than "
                    + $"{s.Shift.UnplannedStopMinutes:F0} minutes that did not fall in a break. Two "
                    + "machines are only comparable on this figure if they are on the same model. "
                    + "Change the model and every availability number here changes with it."
@@ -436,9 +436,15 @@ public static class ProductionReport
 
         var bullets = new List<string>
         {
-            "Panel counts come from PanelAssembled rows in the machine's own production log. "
-            + "Build time is taken as the log states it and never recalculated from the gap "
-            + "between events.",
+            s.Output == OutputKind.Component
+                ? "This is a Component Nailer: each component is one MembersSubAssembled row in the "
+                  + "machine's own production log - a stud with its blocks or noggings nailed on. The "
+                  + "log states no build time for a component, so it is measured from the first "
+                  + "member placed for it to the moment it closed. A panel whose components were built "
+                  + "is not counted again when it closes."
+                : "Panel counts come from PanelAssembled rows in the machine's own production log. "
+                  + "Build time is taken as the log states it and never recalculated from the gap "
+                  + "between events.",
             "Consecutive duplicate lines are dropped before anything is counted. On real exports "
             + "roughly half of all MemberAssembled lines and a third of MachineStopped lines are "
             + "written twice in a row."
@@ -446,15 +452,15 @@ public static class ProductionReport
 
         if (s.ImplausibleBuildTimes > 0)
         {
-            bullets.Add($"{s.ImplausibleBuildTimes} panel(s) logged a build time past the plausible "
-                        + "ceiling, which means a missing stop event rather than a panel that really "
-                        + "took that long. They are counted as panels but left out of time averages.");
+            bullets.Add($"{s.ImplausibleBuildTimes} {s.Unit}(s) logged a build time past the plausible "
+                        + $"ceiling, which means a missing stop event rather than a {s.Unit} that really "
+                        + $"took that long. They are counted as {s.Units} but left out of time averages.");
         }
 
         if (s.ZeroBuildTimes > 0)
         {
-            bullets.Add($"{s.ZeroBuildTimes} completed panel(s) logged a build time of exactly zero. "
-                        + "They are counted as panels; what a zero means here is not yet confirmed.");
+            bullets.Add($"{s.ZeroBuildTimes} completed {s.Unit}(s) logged a build time of exactly zero. "
+                        + $"They are counted as {s.Units}; what a zero means here is not yet confirmed.");
         }
 
         bullets.Add("Days with no output are kept in the daily figures rather than dropped. A day "

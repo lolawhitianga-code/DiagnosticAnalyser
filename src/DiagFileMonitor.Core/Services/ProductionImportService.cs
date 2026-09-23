@@ -390,6 +390,7 @@ public class ProductionImportService
         EndedAt = p.EndedAt,
         StartedAt = p.StartedAt,
         Outcome = p.Outcome.ToString(),
+        Kind = p.Kind.ToString(),
         FastenerCount = p.FastenerCount,
         MembersAssembled = p.MembersAssembled,
         Cube = p.Cube,
@@ -414,12 +415,13 @@ public class ProductionImportService
 
         var rows = await query.OrderBy(p => p.EndedAt).ToListAsync(token);
 
-        return rows.Select(r => new PanelRecord
+        var panels = rows.Select(r => new PanelRecord
         {
             Name = r.Name,
             EndedAt = r.EndedAt,
             StartedAt = r.StartedAt,
             Outcome = Enum.TryParse<PanelOutcome>(r.Outcome, out var outcome) ? outcome : PanelOutcome.Completed,
+            Kind = Enum.TryParse<OutputKind>(r.Kind, out var kind) ? kind : OutputKind.Panel,
             FastenerCount = r.FastenerCount,
             MembersAssembled = r.MembersAssembled,
             Cube = r.Cube,
@@ -429,6 +431,11 @@ public class ProductionImportService
             Junctions = r.Junctions,
             BuildTimeImplausible = r.BuildTimeImplausible
         }).ToList();
+
+        // Not stored, so worked out again the way the classifier did - left false, every day read
+        // back from the database looked like the fastener counter was off.
+        var live = PanelClassifier.DaysTheFastenerCounterWasReporting(panels);
+        return panels.Select(p => p with { FastenerCounterLive = live.Contains(p.Day) }).ToList();
     }
 
     /// <summary>Which machines have production data stored, and how much.</summary>

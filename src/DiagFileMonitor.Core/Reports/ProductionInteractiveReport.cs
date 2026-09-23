@@ -94,19 +94,66 @@ public static class ProductionInteractiveReport
         sb.AppendLine("</div>");
         sb.AppendLine("</div></header>");
 
-        sb.AppendLine(Body);
+        var component = summary.Output == OutputKind.Component;
+
+        sb.AppendLine(component ? ForComponents(Body) : Body);
 
         sb.AppendLine("<script>");
         sb.Append("var PAYLOAD = ");
         sb.Append(ProductionPayload.Build(summary, panels, name, prepared));
         sb.AppendLine(";");
-        sb.AppendLine(Script);
+        sb.AppendLine(component ? ForComponents(Script) : Script);
         sb.AppendLine("</script>");
         sb.AppendLine("</body>");
         sb.AppendLine("</html>");
 
         return sb.ToString();
     }
+
+    /// <summary>
+    /// What a Component Nailer's page says instead. Its unit of output is a component - a stud
+    /// with its blocks or noggings - so the visible wording changes and nothing else does: the
+    /// script's own names (<c>s.panels</c>, <c>data-met="panels"</c>) are left alone.
+    /// Every phrase must be found, which a test holds the template to.
+    /// </summary>
+    public static readonly (string Panel, string Component)[] ComponentWording =
+    {
+        (">Panels<small>", ">Components<small>"),
+        ("Panels the machine did not build", "Components the machine did not build"),
+        (">Every panel<", ">Every component<"),
+        ("Timeline of completed panels", "Timeline of completed components"),
+        ("one panel finished, the next started", "one component finished, the next started"),
+        ("lbl:'Panels'", "lbl:'Components'"),
+        ("' panels · '", "' components · '"),
+        ("<th class=\"l\">Panel</th>", "<th class=\"l\">Panel / stud</th>"),
+        ("No panels completed on this day.", "No components completed on this day."),
+        ("' · panel '", "' · component '"),
+        ("'ONE STUD PER PANEL'", "'ONE STUD PER COMPONENT'"),
+        ("'STUD HEIGHT = PANEL CUBE'", "'STUD HEIGHT = COMPONENT CUBE'"),
+        ("'STUD HEIGHT = PANEL LENGTH'", "'STUD HEIGHT = COMPONENT LENGTH'"),
+        ("Each stud is one completed panel", "Each stud is one completed component"),
+        ("one panel, one stud", "one component, one stud"),
+        ("the panel cube in", "the component cube in"),
+        ("the panel length in", "the component length in"),
+        ("are panels the machine was sent", "are components the machine was sent"),
+        ("Start-up to first panel", "Start-up to first component"),
+        ("After last panel", "After last component"),
+        ("? 'panels' : (MET", "? 'components' : (MET"),
+        ("+' panels</b> between '", "+' components</b> between '"),
+        (" panels an hour</b>", " components an hour</b>"),
+        ("Not enough consecutive panels", "Not enough consecutive components"),
+        ("Each panel counts in the hour", "Each component counts in the hour"),
+        ("(M().unit||'panels')", "(M().unit||'components')"),
+        ("+' panels' : ''", "+' components' : ''"),
+        ("' panels/h over '", "' components/h over '"),
+        ("How to read this.</b> Panel counts",
+            "How to read this.</b> This is a Component Nailer: each component is a stud with its "
+            + "blocks or noggings nailed on, and a panel whose components were built is not counted "
+            + "again. Component counts")
+    };
+
+    public static string ForComponents(string template) =>
+        ComponentWording.Aggregate(template, (text, w) => text.Replace(w.Panel, w.Component, StringComparison.Ordinal));
 
     private static string H(string? value) => (value ?? string.Empty)
         .Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;");

@@ -71,6 +71,9 @@ public class ProductionPanel
     /// <summary>Stored as text so the database stays readable by eye.</summary>
     public string Outcome { get; set; } = string.Empty;
 
+    /// <summary>Panel, or Component for a Component Nailer. Rows stored before this are panels.</summary>
+    public string Kind { get; set; } = "Panel";
+
     public double FastenerCount { get; set; }
     public int MembersAssembled { get; set; }
     public double Cube { get; set; }

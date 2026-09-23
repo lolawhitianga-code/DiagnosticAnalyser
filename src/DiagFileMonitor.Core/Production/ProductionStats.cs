@@ -62,6 +62,21 @@ public class ProductionSummary
     public DateOnly? From { get; init; }
     public DateOnly? To { get; init; }
 
+    /// <summary>
+    /// What this machine makes. A Component Nailer's unit of output is a component, and its
+    /// report says so; everything is counted the same way either way.
+    /// </summary>
+    public OutputKind Output { get; init; } = OutputKind.Panel;
+
+    /// <summary>"panel" or "component".</summary>
+    public string Unit => Output == OutputKind.Component ? "component" : "panel";
+
+    /// <summary>"panels" or "components".</summary>
+    public string Units => Unit + "s";
+
+    /// <summary>"Panels" or "Components".</summary>
+    public string UnitsTitle => char.ToUpperInvariant(Units[0]) + Units[1..];
+
     public int PanelsCompleted { get; init; }
     public int SteppedPast { get; init; }
     public int StoppedByOperator { get; init; }

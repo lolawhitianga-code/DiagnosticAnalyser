@@ -63,6 +63,45 @@ discards them after classification.
   Flagged and kept out of time averages rather than counted at face value.
 - Availability from a shift model rather than from `MachineStarted`/`MachineStopped`.
 
+## Component Nailers count components, not panels
+
+Checked on **M21868** (Mainland, Component Nailer V2, Omron), weeks 24-39 of 2026 plus week 5.
+
+A Component Nailer's output is a **component**: a stud with its blocks or noggings nailed on. Each
+one closes with a line the wall extruders never write:
+
+```
+MembersSubAssembled, 20260914 07:15:58, 2, 5, Nogging-13, 0.0022365, 355,Nogging-13, 0.0022365, 355,Common Stud-10, 0.0146853, 2331
+```
+
+Field 1 is the blocks nailed on, field 2 steps 3, 5, 7, 11, 13 with it and is taken as fasteners
+fired (**unverified**, stored raw), then a name, cube and length **in millimetres** for every member.
+The stud can be first or last in the list.
+
+`PanelAssembled` is almost absent: **5 in 17 weeks against 5,117 components**. Read the panel way,
+the machine made 22 panels and "superseded" 1,151 - which says it did nothing. Read as components:
+
+| | |
+|---|---|
+| Components built | **5,094** over 80 production days - about 64 a day |
+| Cycle, first member placed to closed | median **15 s**, 90% under 33 s |
+| Went wrong | **19 - 0.37%** (18 ran but fired nothing, 1 stopped by the operator) |
+| Studs passed through with nothing nailed | 20 - stepped past, not faults |
+| Panels opened and left with no components | 121 - superseded, as on any machine |
+
+The rules:
+
+- Each `MembersSubAssembled` is one component, `Kind = Component` in the database.
+- The log states no build time for a component, so it is measured from the first member placed
+  for it. Where blocks were fired with nothing placed, from the panel start or previous component.
+  A stud with nothing placed and nothing fired gets no build time, so it reads as stepped past.
+- A panel that produced components was worked: not superseded, and the `PanelAssembled` that closes
+  it is not counted again on top of its components.
+- The report says "components" wherever it would say "panels" when most of the output is components.
+
+Also found here: the fastener-counter-live flag was never stored, so every report built from the
+database said the counter was off every day. It is now worked out again on load.
+
 ## Unknowns - flagged, to verify later
 
 These are live in the code as comments and in the report as a "Not yet verified" callout.

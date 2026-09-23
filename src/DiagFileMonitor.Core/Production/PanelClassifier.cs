@@ -38,6 +38,10 @@ public class PanelClassification
 /// <item>A panel left open when a different name starts is <b>superseded, not a fault</b>. Panel
 /// names are reused labels. Counting these as abandonments produces a 37.7% fault rate on the
 /// M21737 sample, against the 0.5-3% the delivered reports show.</item>
+/// <item>On a Component Nailer each MembersSubAssembled is one finished component and is the
+/// unit of output. A panel that produced components was worked, so it is not superseded, and the
+/// PanelAssembled that closes it is not counted again on top of its components. Measured on
+/// M21868: 5,117 components over 17 weeks against 5 PanelAssembled.</item>
 /// </list>
 /// </summary>
 public class PanelClassifier
@@ -67,7 +71,7 @@ public class PanelClassifier
     /// <summary>
     /// Every panel the log closed, before anything is judged.
     /// </summary>
-    private static List<PanelRecord> Collect(
+    private List<PanelRecord> Collect(
         IReadOnlyList<ProdLogEvent> events, out int restarts, out int badFieldCounts)
     {
         var panels = new List<PanelRecord>();
@@ -78,9 +82,25 @@ public class PanelClassifier
         DateTime? openStart = null;
         var members = 0;
 
+        // Component Nailer: components finished inside the open panel, and when the current one
+        // began - its first member placed, or failing that the last boundary.
+        var components = 0;
+        DateTime? componentStart = null;
+        DateTime? lastBoundary = null;
+
         void CloseWithoutAssembly(DateTime when, string sourceFile)
         {
             if (openName is null) return;
+
+            // Its components were built and are already counted: worked, not left open.
+            if (components > 0)
+            {
+                openName = null;
+                openStart = null;
+                members = 0;
+                components = 0;
+                return;
+            }
 
             panels.Add(new PanelRecord
             {
@@ -105,11 +125,15 @@ public class PanelClassifier
                 {
                     var name = e.Field(0) ?? string.Empty;
 
+                    lastBoundary = e.Timestamp;
+                    componentStart = null;
+
                     if (openName is null)
                     {
                         openName = name;
                         openStart = e.Timestamp;
                         members = 0;
+                        components = 0;
                     }
                     else if (string.Equals(openName, name, StringComparison.OrdinalIgnoreCase))
                     {
@@ -123,6 +147,7 @@ public class PanelClassifier
                         openName = name;
                         openStart = e.Timestamp;
                         members = 0;
+                        components = 0;
                     }
 
                     break;
@@ -130,10 +155,34 @@ public class PanelClassifier
 
                 case ProdLogEventKind.MemberAssembled:
                     if (openName is not null) members++;
+                    componentStart ??= e.Timestamp;
                     break;
+
+                case ProdLogEventKind.MembersSubAssembled:
+                {
+                    // Nothing placed and nothing fired is a stud passed through, so no clock runs
+                    // for it; blocks fired with no member placed ran from the last boundary.
+                    var fired = e.Number(1) > 0;
+                    panels.Add(Component(e, openName, componentStart ?? (fired ? lastBoundary : null)));
+                    components++;
+                    componentStart = null;
+                    lastBoundary = e.Timestamp;
+                    break;
+                }
 
                 case ProdLogEventKind.PanelAssembled:
                 {
+                    // A Component Nailer closing a panel whose components are already counted.
+                    if (components > 0)
+                    {
+                        openName = null;
+                        openStart = null;
+                        members = 0;
+                        components = 0;
+                        lastBoundary = e.Timestamp;
+                        break;
+                    }
+
                     // PanelAssembled, timestamp, fasteners, name, cube, lineal, build, idle, junctions
                     if (e.Fields.Count < 7)
                     {
@@ -169,6 +218,49 @@ public class PanelClassifier
 
         // A panel still open when the log ends is not evidence of anything - the week ran out.
         return panels;
+    }
+
+    /// <summary>
+    /// One Component Nailer component.
+    /// <c>MembersSubAssembled, time, blocks, fasteners, name, cube, length mm, name, cube, ...</c>
+    /// <para>
+    /// The log states no build time for a component, so it is measured from the first member
+    /// placed for it (or the panel start or previous component, where blocks were fired with
+    /// nothing placed) to the moment it closed. A stud with nothing placed and nothing fired gets
+    /// no build time, so it reads as stepped past rather than as a fault. Field 2 steps 3, 5, 7, 11, 13 against the block count and is taken as
+    /// fasteners fired - UNVERIFIED, stored raw like PanelAssembled's count and never converted.
+    /// Lengths here are millimetres, where MemberAssembled's are metres.
+    /// </para>
+    /// </summary>
+    private PanelRecord Component(ProdLogEvent e, string? panelName, DateTime? startedAt)
+    {
+        var members = new List<(string Name, double Cube, double LengthMm)>();
+        for (var i = 2; i + 2 < e.Fields.Count; i += 3)
+            members.Add((e.Field(i) ?? string.Empty, e.Number(i + 1), e.Number(i + 2)));
+
+        var stud = members.FirstOrDefault(m => m.Name.Contains("stud", StringComparison.OrdinalIgnoreCase));
+        if (stud.Name is null && members.Count > 0) stud = members.MaxBy(m => m.LengthMm);
+        var studName = stud.Name ?? string.Empty;
+
+        var build = startedAt is { } start && e.Timestamp >= start ? (e.Timestamp - start).TotalMinutes : 0;
+
+        return new PanelRecord
+        {
+            Kind = OutputKind.Component,
+            Name = string.IsNullOrEmpty(panelName) ? studName
+                : studName.Length == 0 ? panelName : $"{panelName} / {studName}",
+            StartedAt = startedAt,
+            EndedAt = e.Timestamp,
+            FastenerCount = e.Number(1),
+            MembersAssembled = members.Count,
+            Cube = members.Sum(m => m.Cube),
+            Lineal = members.Sum(m => m.LengthMm) / 1000,
+            BuildMinutes = build,
+            // Blocks nailed on - the component's joints, as junctions are a panel's.
+            Junctions = e.Number(0),
+            BuildTimeImplausible = build > _options.MaxPanelBuildMinutes,
+            SourceFile = e.SourceFile
+        };
     }
 
     /// <summary>
@@ -211,7 +303,7 @@ public class PanelClassifier
     /// time reports a single fastener is a day the counter was off, and build time alone decides.
     /// </para>
     /// </summary>
-    private static HashSet<DateOnly> DaysTheFastenerCounterWasReporting(IEnumerable<PanelRecord> panels)
+    internal static HashSet<DateOnly> DaysTheFastenerCounterWasReporting(IEnumerable<PanelRecord> panels)
     {
         var live = new HashSet<DateOnly>();
 

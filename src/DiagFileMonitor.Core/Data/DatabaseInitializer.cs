@@ -27,7 +27,8 @@ public static class DatabaseInitializer
         ("ProductionLogFiles", "Source", "TEXT NOT NULL DEFAULT 'WeeklyLog'"),
         ("ProductionLogFiles", "CoversFromUtc", "TEXT NULL"),
         ("ProductionLogFiles", "CoversToUtc", "TEXT NULL"),
-        ("ProductionLogFiles", "PanelsSkippedAsDuplicate", "INTEGER NOT NULL DEFAULT 0")
+        ("ProductionLogFiles", "PanelsSkippedAsDuplicate", "INTEGER NOT NULL DEFAULT 0"),
+        ("ProductionPanels", "Kind", "TEXT NOT NULL DEFAULT 'Panel'")
     };
 
     /// <summary>
@@ -86,6 +87,7 @@ public static class DatabaseInitializer
                 "EndedAt" TEXT NOT NULL,
                 "StartedAt" TEXT NULL,
                 "Outcome" TEXT NOT NULL,
+                "Kind" TEXT NOT NULL DEFAULT 'Panel',
                 "FastenerCount" REAL NOT NULL,
                 "MembersAssembled" INTEGER NOT NULL,
                 "Cube" REAL NOT NULL,

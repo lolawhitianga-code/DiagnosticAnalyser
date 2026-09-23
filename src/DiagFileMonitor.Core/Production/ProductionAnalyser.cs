@@ -80,6 +80,9 @@ public static class ProductionAnalyser
             Site = site,
             From = from,
             To = to,
+            Output = completed.Count(p => p.Kind == OutputKind.Component) * 2 > completed.Count
+                ? OutputKind.Component
+                : OutputKind.Panel,
             PanelsCompleted = completed.Count,
             SteppedPast = panels.Count(p => p.Outcome == PanelOutcome.SteppedPast),
             StoppedByOperator = panels.Count(p => p.Outcome == PanelOutcome.StoppedByOperator),

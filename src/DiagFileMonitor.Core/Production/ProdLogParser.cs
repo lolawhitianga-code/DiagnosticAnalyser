@@ -40,7 +40,8 @@ public static class ProdLogParser
         ["MachineIdleStart"] = ProdLogEventKind.MachineIdleStart,
         ["MachineIdleStop"] = ProdLogEventKind.MachineIdleStop,
         ["UserLogin"] = ProdLogEventKind.UserLogin,
-        ["UserLogout"] = ProdLogEventKind.UserLogout
+        ["UserLogout"] = ProdLogEventKind.UserLogout,
+        ["MembersSubAssembled"] = ProdLogEventKind.MembersSubAssembled
     };
 
     public static ProdLogParseResult ParseFile(string path)

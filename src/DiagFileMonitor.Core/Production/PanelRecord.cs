@@ -40,9 +40,25 @@ public enum PanelOutcome
     Superseded
 }
 
+/// <summary>What one record stands for.</summary>
+public enum OutputKind
+{
+    /// <summary>A wall panel, closed by PanelAssembled.</summary>
+    Panel,
+
+    /// <summary>
+    /// One component off a Component Nailer - a stud with its blocks or noggings - closed by
+    /// MembersSubAssembled. On those machines this, not the panel, is the unit of output.
+    /// </summary>
+    Component
+}
+
 /// <summary>One panel the machine worked on, after classification.</summary>
 public record PanelRecord
 {
+    /// <summary>A panel, or a Component Nailer's component. Counted the same way either way.</summary>
+    public OutputKind Kind { get; init; } = OutputKind.Panel;
+
     /// <summary>Panel label from the log. Reused across jobs - never treat it as unique.</summary>
     public string Name { get; init; } = string.Empty;
 

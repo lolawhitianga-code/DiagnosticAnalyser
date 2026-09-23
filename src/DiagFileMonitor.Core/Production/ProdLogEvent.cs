@@ -17,6 +17,14 @@ public enum ProdLogEventKind
     /// own production report.</summary>
     UserLogout,
 
+    /// <summary>
+    /// A Component Nailer finishing one component: a stud with its blocks or noggings nailed on.
+    /// <c>MembersSubAssembled, time, blocks, fasteners?, then name, cube, length mm for each member</c>.
+    /// That is the machine's unit of output - PanelAssembled only turns up when a whole panel's
+    /// worth is done. Seen on M21868 (Mainland, Component Nailer V2).
+    /// </summary>
+    MembersSubAssembled,
+
     /// <summary>An event name we do not recognise. Counted and reported, never fatal.</summary>
     Unknown
 }
