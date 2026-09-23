@@ -38,8 +38,13 @@ public record WaitingSignal(
 /// <summary>An axis the waiting message named, and what it was doing.</summary>
 public record WaitingAxis(string Name, string State, TimeSpan? Since)
 {
-    /// <summary>The only state that satisfies "in position".</summary>
-    public bool Ready => State.Equals("OK", StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// OK is in position. Enabled is not a fault either: the axis was switched back on, and its
+    /// moves after that report under its node ("Node0 Status"), not its name.
+    /// </summary>
+    public bool Ready => State.Equals("OK", StringComparison.OrdinalIgnoreCase) || Enabled;
+
+    public bool Enabled => State.Equals("Enabled", StringComparison.OrdinalIgnoreCase);
 }
 
 public class WaitingOnFindings
@@ -218,14 +223,19 @@ public static class WaitingOnCheck
         foreach (var entry in entries)
         {
             if (entry.LineNumber > upToLine) break;
-            if (entry.Category != MachineLogCategory.MotionEvent) continue;
+
+            // "Axis Disabled" is a motion event but "Axis Enable" / "Axis Enabled" is logged under
+            // Other. Missing it left an axis reading disabled long after it came back on - M21868
+            // showed StudTrolley "Disabled since 10:43:25" while it moved at 10:52.
+            var enabled = entry.Description.Trim().StartsWith("Axis Enable", StringComparison.OrdinalIgnoreCase);
+            if (entry.Category != MachineLogCategory.MotionEvent && !enabled) continue;
 
             // "FloatingSideHeight Status" and "FloatingSideHeight" are the same axis.
             var name = entry.Tag.EndsWith(" Status", StringComparison.OrdinalIgnoreCase)
                 ? entry.Tag[..^" Status".Length]
                 : entry.Tag;
 
-            latest[name.Trim()] = (entry.Description.Trim(), entry.Time);
+            latest[name.Trim()] = (enabled ? "Enabled" : entry.Description.Trim(), entry.Time);
         }
 
         return latest

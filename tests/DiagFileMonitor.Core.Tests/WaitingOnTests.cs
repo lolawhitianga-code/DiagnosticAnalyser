@@ -305,4 +305,37 @@ public class MachineIoMapTests
         Assert.Equal(2, found!.Instances);
         Assert.True(found.IsPaired);
     }
+
+    /// <summary>
+    /// M21868: "Axis Disabled" is a motion event, but "Axis Enable" comes under Other. Missing it
+    /// reported StudTrolley disabled since 10:43:25 while it was moving at 10:52.
+    /// </summary>
+    [Fact]
+    public void An_axis_switched_back_on_is_not_reported_disabled()
+    {
+        var findings = WaitingOnCheck.Check(MachineLogFile.Parse(new[]
+        {
+            "10:43:25.091,  MotionEvent, StudTrolley,  Axis Disabled",
+            "10:43:26.624,  Other, StudTrolley,  Axis Enable",
+            "10:52:57.480,  Other, ComponentNailerV2PLC,  Step Condition, Waiting for Trolley Back-off"
+        }));
+
+        var axis = Assert.Single(findings.Axes);
+        Assert.Equal("StudTrolley", axis.Name);
+        Assert.True(axis.Enabled);
+        Assert.True(axis.Ready);
+        Assert.Empty(findings.NotReady);
+    }
+
+    [Fact]
+    public void An_axis_still_disabled_is_still_reported()
+    {
+        var findings = WaitingOnCheck.Check(MachineLogFile.Parse(new[]
+        {
+            "10:43:25.091,  MotionEvent, StudTrolley,  Axis Disabled",
+            "10:52:57.480,  Other, ComponentNailerV2PLC,  Step Condition, Waiting for Trolley Back-off"
+        }));
+
+        Assert.Equal("Disabled", Assert.Single(findings.NotReady).State);
+    }
 }

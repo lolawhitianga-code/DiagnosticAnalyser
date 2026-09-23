@@ -773,7 +773,9 @@ public static class SpidaReportFormatter
 
             foreach (var axis in waiting.Axes)
             {
-                var verdict = axis.Ready ? "in position" : ">>> " + axis.State;
+                var verdict = axis.Enabled ? "enabled (its moves report on its node status)"
+                    : axis.Ready ? "in position"
+                    : ">>> " + axis.State;
                 text.AppendLine($"    {axis.Name,-28} {verdict}"
                                 + (axis.Since is { } at ? $"   since {at:hh\\:mm\\:ss}" : string.Empty));
             }
