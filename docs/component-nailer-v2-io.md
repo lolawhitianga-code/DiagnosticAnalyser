@@ -64,7 +64,8 @@ Not in the map: the log does not record these as input changes.
 
 ## Not in use
 
-Configured but shown as Not In Use, so left out of the map. Listing them would make the report
+Configured but not in use, so left out of the map. HorizClampExtended and ThreePhaseOK were
+confirmed not in use by support; the rest are marked Not In Use on the screen. Listing them would make the report
 call every one a sensor that never came on.
 
 - Inputs: HorizClampExtended, ThreePhaseOK, LowerNailSensor, UpperNailSensor, PlateHeightOver85,

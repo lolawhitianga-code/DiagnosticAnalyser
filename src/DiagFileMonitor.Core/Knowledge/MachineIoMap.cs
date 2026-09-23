@@ -202,8 +202,8 @@ public static class MachineIoMap
     /// UpperGunLowerIsHigh at 0.6, IO-UpperGunLowerGoHigh at 0.3.
     /// </para>
     /// <para>
-    /// <b>Left out on purpose:</b> points the screen shows as Not In Use - HorizClampExtended,
-    /// ThreePhaseOK, LowerNailSensor, UpperNailSensor, PlateHeightOver85, UpperGunWoodSensor,
+    /// <b>Left out on purpose:</b> points not in use - HorizClampExtended and ThreePhaseOK
+    /// (confirmed by support), and those the screen shows as Not In Use: LowerNailSensor, UpperNailSensor, PlateHeightOver85, UpperGunWoodSensor,
     /// LowerGunWoodSensor and the HorizClampBack output. They never change, so listing them would
     /// report every one as a sensor that never came on.
     /// </para>
