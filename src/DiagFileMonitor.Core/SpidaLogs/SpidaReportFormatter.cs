@@ -58,6 +58,8 @@ public static class SpidaReportFormatter
         // callout itself rather than something to notice halfway down a report.
         if (knowledge is not null) AppendGuardStops(text, knowledge.Guards, knowledge.FloatingHead);
         if (knowledge is not null) AppendStuckStep(text, knowledge.StuckStep);
+        // The machine stating the problem in numbers. High up, because it is not context.
+        if (knowledge is not null) AppendMeasurements(text, knowledge.Measurements);
         // What the operator last asked for, and what the machine did about it. This goes high up
         // because on a hand-driven machine it is usually the answer.
         if (knowledge is not null) AppendLastOperatorAction(text, knowledge);
@@ -567,6 +569,59 @@ public static class SpidaReportFormatter
     /// that trips forty times a shift and clears in a fifth of a second each time is the machine
     /// working, and the same message once with nothing moving four minutes later is the fault.
     /// </summary>
+    private static void AppendMeasurements(StringBuilder text, MeasurementFindings found)
+    {
+        if (!found.Any) return;
+
+        text.AppendLine();
+        text.AppendLine("THE MACHINE'S OWN CHECKS FAILED");
+        text.AppendLine($"  {ReportText.Wrap("The machine measured something before carrying on and said it was not "
+            + "where it should be. That is the machine stating the problem in numbers.", 2)}");
+
+        foreach (var check in found.Failed)
+        {
+            var first = check.Failures[0].At;
+            var last = check.Failures[^1].At;
+
+            text.AppendLine();
+            text.AppendLine($"  {check.What.ToUpperInvariant()} - {check.Count} time(s), "
+                            + $"{first:hh\\:mm} to {last:hh\\:mm}");
+            text.AppendLine($"    {ReportText.Wrap($"Expected {check.Expected:0.#}; got {check.LowestGot:0.#} to "
+                + $"{check.HighestGot:0.#}."
+                + (check.AllShort ? $" Every reading short of {check.Expected:0.#} - the part was stopped short "
+                    + "of where it should be when the machine looked, not a noisy sensor."
+                   : check.AllOver ? $" Every reading past {check.Expected:0.#}." : ""), 4)}");
+
+            if (check.TypicalSinceClampDown is { } since)
+            {
+                var normal = found.TypicalClampToLock is { } lockAt
+                    ? $" On the {found.GoodClampCycles} good cycle(s) the clamp locked "
+                      + $"{lockAt.TotalSeconds:0.00} s after going down ({found.FastestClampToLock!.Value.TotalSeconds:0.00}"
+                      + $"-{found.SlowestClampToLock!.Value.TotalSeconds:0.00} s); on these no lock was logged "
+                      + "before the check."
+                    : string.Empty;
+
+                text.AppendLine($"    {ReportText.Wrap($"The check came {since.TotalSeconds:0.00} s after the clamps were "
+                    + $"sent down, the same every time - a set time running out.{normal}", 4)}");
+            }
+
+            if (check.SeenBefore is { } before)
+            {
+                text.AppendLine();
+                text.AppendLine($"    {ReportText.Wrap(before, 4)}");
+            }
+        }
+
+        if (found.ClampTimingChanges.Count > 0)
+        {
+            text.AppendLine();
+            text.AppendLine($"  {ReportText.Wrap($"Clamp and lock timing in Change.log ({found.ClampTimingChanges.Count} "
+                + "change(s), newest first). Check them against how long the clamp really takes to arrive:", 2)}");
+            foreach (var change in found.ClampTimingChanges.Take(12))
+                text.AppendLine($"    {change.Display}");
+        }
+    }
+
     private static void AppendStuckStep(StringBuilder text, StuckStep? stuck)
     {
         if (stuck is null || !stuck.WorthReporting) return;

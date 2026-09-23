@@ -83,6 +83,9 @@ public class KnowledgeFindings
     /// <summary>The step the machine was sitting on when the log ran out, where that is unusual.</summary>
     public StuckStep? StuckStep { get; init; }
 
+    /// <summary>The machine's own measurement checks that failed - "Incorrect Nog Height ... Expected : 45.0 Got: 12.2".</summary>
+    public MeasurementFindings Measurements { get; init; } = MeasurementFindings.None;
+
     /// <summary>Times the machine would not bring the floating head in, and whether that was routine.</summary>
     public FloatingHeadFindings FloatingHead { get; init; } = new(Array.Empty<ObstructionEpisode>(), TimeSpan.Zero);
 
@@ -112,6 +115,7 @@ public class KnowledgeFindings
         || CutNotTaken.Any
         || WaitingOn.Any
         || StepStory.Any
+        || Measurements.Any
         || (Knowledge is not null
             && (MatchedFaults.Count > 0 || IssuesSeenInThisLog.Count > 0 || IssueHistoryForSerial.Count > 0
                 || Axes.Count > 0 || PlatePresentEvents.Count > 0 || UnknownFaults.Count > 0
@@ -131,7 +135,8 @@ public static class KnowledgeAnnotator
         string? machineModel,
         string? serialNumber,
         string? machineConfigXmlPath = null,
-        string? bundleRoot = null)
+        string? bundleRoot = null,
+        IReadOnlyList<ChangeLogEntry>? changeLog = null)
     {
         var knowledge = MachineKnowledgeBase.Find(machineModel ?? analysis.MachineModelFromLog);
 
@@ -154,6 +159,7 @@ public static class KnowledgeAnnotator
         var floatingHead = FloatingHeadCheck.Check(machineLog);
         var guards = GuardStopLedger.Check(machineLog, floatingHead);
         var stuck = StuckStepCheck.Check(machineLog);
+        var measurements = MeasurementCheck.Check(machineLog, changeLog);
 
         // The floating head check knows why the machine is waiting and this one does not, so
         // where they are talking about the same wait, the one with the reason wins.
@@ -179,6 +185,7 @@ public static class KnowledgeAnnotator
                 CutNotTaken = cutNotTaken,
                 WaitingOn = waitingOn,
                 StuckStep = stuck,
+                Measurements = measurements,
                 FloatingHead = floatingHead,
                 Guards = guards,
                 Platform = platform,
@@ -256,6 +263,7 @@ public static class KnowledgeAnnotator
             CutNotTaken = cutNotTaken,
             WaitingOn = waitingOn,
             StuckStep = stuck,
+            Measurements = measurements,
             FloatingHead = floatingHead,
             Guards = guards,
             Platform = platform,

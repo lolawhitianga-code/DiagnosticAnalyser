@@ -31,15 +31,29 @@ was never asked for and 68 components went through, which fits the operator's 90
 
 ## Support bundle 17 September - "clamp won't engage and clamp nog" (panel 9, soffit nog)
 
-- The machine flagged `Incorrect Nog Height From Top Of Stud, Expected : 45.0 Got:` anywhere from
-  about 12 to 30 mm (once -5.4) through the whole session - 07:10, 07:12-07:16, 07:50-07:51,
-  09:36-09:38, 10:43. It stops for the operator each time.
-- Worth checking whether a soffit nog is meant to sit at 45 mm from the top of the stud, or whether
-  the nog height setting or sensor is off for that member.
-- **Not a lead:** `ClampAirOK` (1.7) changes to 1 on the very last line, 10:55:22. Five other inputs
-  "change" in the same instant, four never seen before that session, and in the July bundles none
-  of them logged at all. The log does not record input states at start-up, so that burst is the
-  software reading its inputs again, not the air coming back.
+**Cause, found on the machine:** the nog clamp was coming down very slowly from its upper position
+(about 200 mm) and was locked in place before it arrived at its 45 mm position.
+
+What the log shows, now that the cause is known:
+
+- `Incorrect Nog Height From Top Of Stud, Expected : 45.0 Got:` **41 times**, 07:10 to 10:43, every
+  reading short of 45 (12 to 30 mm, twice below zero). The clamp stopped short, every time.
+- On good cycles the clamp lock (`IO-VertFrontClampLock` / `IO-VertBackClampLock`) comes on about
+  **1.24 s** after the clamps are sent down (`IO-VertFrontClamp` / `IO-VertBackClamp` on).
+- On every failure the height check comes at **2.62 s**, the same each time - a set time running
+  out - with no lock logged before it.
+- Change.log shows `ClampDelay` and `LockDelay` changed 13 times on 10-11 June 2026 (LockDelay
+  200, 280, 500, 200, 1000, 100, 500, 1000, 200). Worth checking the clamp's speed before
+  reaching for those again.
+
+The report now has a **THE MACHINE'S OWN CHECKS FAILED** section that reads every
+`Incorrect ... Expected : X Got: Y` message on any machine, gives the count, spread and clamp
+timing, lists the clamp and lock delay changes, and for nog height says what it was here.
+
+**Not a lead:** `ClampAirOK` (1.7) changes to 1 on the very last line, 10:55:22. Five other inputs
+"change" in the same instant, four never seen before that session, and in the July bundles none of
+them logged at all. The log does not record input states at start-up, so that burst is the software
+reading its inputs again, not the air coming back.
 
 ## Tool fix from this case
 
